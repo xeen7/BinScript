@@ -1,0 +1,57 @@
+[workspace]
+members = [
+    "crates/compiler-core",
+    "crates/parser",
+    "crates/hir",
+    "crates/mir",
+    "crates/codegen-llvm",
+    "crates/diagnostics",
+    "crates/module-graph",
+    "rt-stubs",
+    "crates/incremental",
+]
+resolver = "2"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+# SWC
+swc_core = { version = "66", features = [
+    "common",
+    "ecma_ast",
+    "ecma_parser",
+    "ecma_visit",
+    "ecma_transforms",
+    "ecma_transforms_typescript",
+    "bundler",
+] }
+
+# Graph & Resolver
+petgraph = "0.8.3"
+oxc_resolver = "11.19.1"
+
+# LLVM
+inkwell = { version = "0.9", features = ["llvm22-1"] }
+
+# Utilities
+thiserror = "2"
+miette = { version = "7", features = ["fancy"] }
+clap = { version = "4", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+which = "7"
+tempfile = "3"
+rayon = "1.10"
+serde = { version = "1", features = ["derive"] }
+bincode = "1"
+sha2 = "0.10"
+
+[profile.release]
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"
+

@@ -1,0 +1,12 @@
+[package]
+name = "module-graph"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+diagnostics = { path = "../diagnostics" }
+parser = { path = "../parser" }
+swc_core = { workspace = true, features = ["common", "ecma_ast"] }
+petgraph.workspace = true
+oxc_resolver.workspace = true
+thiserror.workspace = true

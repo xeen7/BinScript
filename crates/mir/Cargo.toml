@@ -1,0 +1,8 @@
+[package]
+name = "mir"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+diagnostics = { path = "../diagnostics" }
+hir = { path = "../hir" }
