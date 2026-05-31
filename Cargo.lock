@@ -2528,6 +2528,7 @@ version = "0.1.0"
 dependencies = [
  "libc",
  "once_cell",
+ "regex",
  "sonic-rs",
 ]
 

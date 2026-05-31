@@ -146,7 +146,7 @@ function testNullish() {
   assertEqual("Nullish a ?? fallback",   a ?? "fallback", "fallback");
   assertEqual("Nullish b ?? fallback",   b ?? "fallback", "fallback");
   assertEqual("Nullish c ?? fallback",   c ?? "fallback", "hello");
-  assertEqual("Optional a?.length",      a?.length, null);
+  assertEqual("Optional a?.length",      a?.length, undefined);
   assertEqual("Optional c?.length",      c?.length, 5.0);
   assertEqual("NullishAssign ??=",       (a ?? "assigned"), "assigned");
 }

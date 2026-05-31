@@ -1,7 +1,8 @@
 function assertEqual(actual: any, expected: any, message: string) {
     if (actual !== expected) {
-        throw new Error("Assert failed: " + message + " | expected " + expected + ", got " + actual);
+        throw new Error("Assert [" + message + "]: expected " + expected + ", got " + actual + " → FAIL");
     }
+    console.log("Assert [" + message + "]: expected " + expected + ", got " + actual + " → PASS");
 }
 
 function runDateConstructorTests() {

@@ -22,8 +22,10 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | 3. Class Body Members | 19 | 19 | 0 | 0 | 100% |
 | 4. Type System Constructs | 22 | 22 | 0 | 0 | 100% |
 | 5. Pattern Syntax | 6 | 6 | 0 | 0 | 100% |
+| 6. Built-in Standard Library | 9 | 9 | 0 | 0 | 100% |
+| 7. Compiler Architecture | 2 | 2 | 0 | 0 | 100% |
 | Appendix. Special Values | 9 | 9 | 0 | 0 | 100% |
-| **Overall** | **196** | **196** | **0** | **0** | **100%** |
+| **Overall** | **207** | **207** | **0** | **0** | **100%** |
 
 ---
 
@@ -333,6 +335,31 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | Default pattern | `x = defaultValue` | 🟢 Done | Supported generically for all nested destructuring patterns and parameters. |
 | Nested pattern | `{ a: { b } }` | 🟢 Done | Supported generically via recursive desugaring. |
 | Rename pattern | `{ orig: alias }` | 🟢 Done | Supported in object destructuring. |
+
+---
+
+## 6. Built-in Standard Library (ES2021)
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| `Object` methods | 🟢 Done | `keys()`, `values()`, `entries()`, `assign()` implemented with deterministic iteration order. |
+| `Number` methods | 🟢 Done | `toFixed()`, `toPrecision()`, `toString(radix)` via external Rust standard library calls. |
+| Collections (`Map`, `Set`) | 🟢 Done | Iterables supported in constructors. `VTABLE`s assigned. Map/Set lookup and mutation methods work. |
+| Weak Collections (`WeakMap`, `WeakSet`) | 🟢 Done | Handled via proxy to Map/Set with dedicated `VTABLE`s for type identification. |
+| `Date` constructor and methods | 🟢 Done | `new Date()`, `Date.now()`, parse from string/timestamp/components, and getters (`getFullYear`, `getMonth`, etc.). |
+| `Error` objects | 🟢 Done | `Error`, `TypeError`, `RangeError`, etc. with correct `VTABLE` for `instanceof` checks. |
+| `RegExp` objects | 🟢 Done | Basic instantiation, bound to `REGEXP_VTABLE`. |
+| `JSON` object | 🟢 Done | `stringify()` and `parse()` functional, properly serializing array and object fields dynamically. |
+| `instanceof` Built-in Support | 🟢 Done | Compiler natively maps built-ins to static internal shape IDs for accurate `instanceof` type checks. |
+
+---
+
+## 7. Compiler Refactoring & Architecture
+
+| Feature | Status | Notes |
+| --- | --- | --- |
+| Submodule Restructuring (`lower/expr`) | 🟢 Done | Grouped HIR lowering into `call`, `access`, `control`, `literal`, `ops`, and `var`. |
+| Modularized Built-ins | 🟢 Done | Moved `builtins.rs` into `crates/mir/src/lower/builtins/` for scalable dispatch. |
 
 ---
 

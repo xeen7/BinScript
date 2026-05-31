@@ -351,7 +351,7 @@ impl LowerCtx {
                 }
             }
             _ => Err(CompileError::Lowering {
-                message: "Unsupported destructuring pattern type".into(),
+                message: format!("Unsupported destructuring pattern type in assign: {:?}", pat),
             }),
         }
     }

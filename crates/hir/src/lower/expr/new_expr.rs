@@ -110,6 +110,58 @@ impl LowerCtx {
                     });
                 }
             }
+            if class_name == "Map" {
+                if args.is_empty() {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_Map_new_0".to_string())),
+                        args: vec![],
+                    });
+                } else {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_Map_new_1".to_string())),
+                        args: vec![args[0].clone()],
+                    });
+                }
+            }
+            if class_name == "Set" {
+                if args.is_empty() {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_Set_new_0".to_string())),
+                        args: vec![],
+                    });
+                } else {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_Set_new_1".to_string())),
+                        args: vec![args[0].clone()],
+                    });
+                }
+            }
+            if class_name == "WeakMap" {
+                if args.is_empty() {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_WeakMap_new_0".to_string())),
+                        args: vec![],
+                    });
+                } else {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_WeakMap_new_1".to_string())),
+                        args: vec![args[0].clone()],
+                    });
+                }
+            }
+            if class_name == "WeakSet" {
+                if args.is_empty() {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_WeakSet_new_0".to_string())),
+                        args: vec![],
+                    });
+                } else {
+                    return Ok(HirExpr::Call {
+                        callee: Box::new(HirExpr::GlobalRef("__bs_WeakSet_new_1".to_string())),
+                        args: vec![args[0].clone()],
+                    });
+                }
+            }
             if class_name == "RegExp" {
                 let pattern = if args.is_empty() {
                     HirExpr::Lit(Literal::String("".to_string()))

@@ -1,6 +1,6 @@
 //! MIR type definitions — three-address, basic-block IR.
 
-use crate::builtins::BuiltinFn;
+use crate::lower::builtins::BuiltinFn;
 
 /// Virtual register identifier.
 pub type MirReg = u32;
@@ -51,6 +51,15 @@ pub enum MirInstr {
 
     // ── logical ────────────────────────────────────────────────────────────
     Not(MirReg, MirOperand),
+
+    // ── bitwise ────────────────────────────────────────────────────────────
+    BitAnd(MirReg, MirOperand, MirOperand),
+    BitOr(MirReg, MirOperand, MirOperand),
+    BitXor(MirReg, MirOperand, MirOperand),
+    Shl(MirReg, MirOperand, MirOperand),
+    Shr(MirReg, MirOperand, MirOperand),
+    UShr(MirReg, MirOperand, MirOperand),
+    BitNot(MirReg, MirOperand),
 
     // ── data movement ──────────────────────────────────────────────────────
     Move(MirReg, MirOperand),

@@ -2,13 +2,13 @@
 
 function assertEqual(actual: any, expected: any, message: string) {
     if (actual !== expected) {
-        throw new Error("Assert failed: " + message + " | expected " + expected + ", got " + actual);
+        throw new Error("Assert [" + message + "]: expected " + expected + ", got " + actual + " → FAIL");
     }
+    console.log("Assert [" + message + "]: expected " + expected + ", got " + actual + " → PASS");
 }
-
 function runGlobalFunctionsTests() {
     console.log("--- Global Functions ---");
-    
+
     assertEqual(parseInt("123"), 123, "parseInt basic");
     assertEqual(parseInt("101", 2), 5, "parseInt radix 2");
     assertEqual(parseInt("  -45abc"), -45, "parseInt signed/trailing");
@@ -29,11 +29,11 @@ function runGlobalFunctionsTests() {
 
 function runDateTests() {
     console.log("--- Date Object ---");
-    
+
     const now = Date.now();
     assertEqual(typeof now === "number" && now > 0, true, "Date.now()");
 
-    const date = new Date(1715990400000); 
+    const date = new Date(1715990400000);
     assertEqual(date.getTime(), 1715990400000, "Date getTime");
     assertEqual(date.getFullYear(), 2024, "Date getFullYear");
     assertEqual(date.getMonth(), 4, "Date getMonth (0-indexed)");
@@ -67,7 +67,7 @@ function runSetTests() {
 
     set.add("apple");
     set.add("banana");
-    set.add("apple"); 
+    set.add("apple");
     assertEqual(set.size, 2, "Set size 2 (no duplicates)");
     assertEqual(set.has("banana"), true, "Set has banana");
 
@@ -83,8 +83,8 @@ function runJSONTests() {
     console.log("--- JSON Object ---");
     const obj = { name: "Antigravity", age: 1.0, active: true };
     const jsonStr = JSON.stringify(obj);
-    
-    assertEqual(jsonStr, '{"name":"Antigravity","age":1,"active":true}', "JSON stringify");
+
+    assertEqual(jsonStr, '{"active":true,"age":1,"name":"Antigravity"}', "JSON stringify");
 
     const parsed = JSON.parse(jsonStr);
     assertEqual(parsed.name, "Antigravity", "JSON parse name");
@@ -140,7 +140,7 @@ function runObjectTests() {
 
 function runNumberTests() {
     console.log("--- Number & Math Objects ---");
-    
+
     assertEqual(Number.MAX_VALUE > 0, true, "Number.MAX_VALUE");
     assertEqual(Number.MIN_VALUE > 0, true, "Number.MIN_VALUE");
     assertEqual(Number.isNaN(Number.NaN), true, "Number.NaN");

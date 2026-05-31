@@ -30,7 +30,7 @@ function testDestructuring() {
   assertEqual("Object destructuring nested", nested, 300.0);
   assertEqual("Object destructuring default w", w, 400.0);
   assertEqual("Object destructuring restObj.y", restObj.y, 200.0);
-  assertEqual("Object destructuring restObj.x", restObj.x, null); 
+  assertEqual("Object destructuring restObj.x", restObj.x, undefined); 
 }
 
 type MyComplexType<T> = T extends string ? "A" : "B";

@@ -244,9 +244,16 @@ impl LowerCtx {
                                 args,
                             })
                         }
-                        _ => Err(CompileError::Lowering {
-                            message: "Computed dynamic method calls not supported".into(),
-                        })
+                        MemberProp::Computed(computed) => {
+                            let index_expr = self.lower_expr(&computed.expr)?;
+                            Ok(HirExpr::Call {
+                                callee: Box::new(HirExpr::IndexGet {
+                                    object: Box::new(obj_expr),
+                                    index: Box::new(index_expr),
+                                }),
+                                args,
+                            })
+                        }
                     }
                 }
                 // foo(…)

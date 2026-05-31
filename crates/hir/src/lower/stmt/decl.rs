@@ -147,6 +147,7 @@ impl LowerCtx {
         let mut static_methods = Vec::new();
         let mut explicit_constructor = None;
         let mut static_blocks = Vec::new();
+        let mut instance_field_inits: Vec<(String, Option<HirExpr>)> = Vec::new();
 
         // Collect fields first
         for member in &class_decl.class.body {
@@ -157,7 +158,12 @@ impl LowerCtx {
                 ClassMember::ClassProp(prop) => {
                     let name = self.prop_name_to_string(&prop.key);
                     if !prop.is_static {
-                        own_fields.push(name);
+                        let init = match &prop.value {
+                            Some(e) => Some(self.lower_expr(e)?),
+                            None => None,
+                        };
+                        own_fields.push(name.clone());
+                        instance_field_inits.push((name, init));
                     } else {
                         let init = match &prop.value {
                             Some(e) => Some(self.lower_expr(e)?),
@@ -200,7 +206,12 @@ impl LowerCtx {
                 ClassMember::PrivateProp(prop) => {
                     let name = format!("__private_{}", prop.key.name);
                     if !prop.is_static {
-                        own_fields.push(name);
+                        let init = match &prop.value {
+                            Some(e) => Some(self.lower_expr(e)?),
+                            None => None,
+                        };
+                        own_fields.push(name.clone());
+                        instance_field_inits.push((name, init));
                     } else {
                         let init = match &prop.value {
                             Some(e) => Some(self.lower_expr(e)?),
@@ -276,7 +287,18 @@ impl LowerCtx {
                 Some(b) => self.lower_block_stmts(b)?,
                 None => Vec::new(),
             };
+            // Inject instance field initializers at the start of the constructor body
+            let mut field_init_stmts = Vec::new();
+            for (f_name, f_init) in &instance_field_inits {
+                let init_val = f_init.clone().unwrap_or(HirExpr::Lit(Literal::Undefined));
+                field_init_stmts.push(HirStmt::Expr(HirExpr::MemberSet {
+                    object: Box::new(HirExpr::Var(this_id)),
+                    property: f_name.clone(),
+                    value: Box::new(init_val),
+                }));
+            }
             let mut full_body = param_destruct_stmts;
+            full_body.extend(field_init_stmts);
             full_body.extend(body);
 
             self.this_binding = old_this;
@@ -306,6 +328,15 @@ impl LowerCtx {
             
             let params = vec![(this_id, "this".to_string())];
             let mut body = Vec::new();
+            // Inject instance field initializers into default constructor
+            for (f_name, f_init) in &instance_field_inits {
+                let init_val = f_init.clone().unwrap_or(HirExpr::Lit(Literal::Undefined));
+                body.push(HirStmt::Expr(HirExpr::MemberSet {
+                    object: Box::new(HirExpr::Var(this_id)),
+                    property: f_name.clone(),
+                    value: Box::new(init_val),
+                }));
+            }
             
             // If has super class, default ctor calls super constructor with this
             if let Some(super_c) = &super_name {

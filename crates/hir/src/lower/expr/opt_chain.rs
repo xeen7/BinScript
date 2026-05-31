@@ -1,6 +1,6 @@
 use swc_core::ecma::ast::*;
 
-use diagnostics::{CompileError, CompileResult};
+use diagnostics::CompileResult;
 use crate::types::*;
 use crate::lower::LowerCtx;
 

@@ -45,6 +45,17 @@ pub unsafe extern "C" fn __bs_shadow_pop() {
     });
 }
 
+/// Get the current shadow stack top pointer (for saving before try blocks).
+pub fn get_shadow_stack_top() -> *mut ShadowFrame {
+    SHADOW_STACK_TOP.with(|top| top.get())
+}
+
+/// Restore the shadow stack top pointer (for unwinding on exception throw).
+#[no_mangle]
+pub unsafe extern "C" fn __bs_shadow_set(top_ptr: *mut ShadowFrame) {
+    SHADOW_STACK_TOP.with(|top| top.set(top_ptr));
+}
+
 /// Walk all shadow stack frames and call `callback` on each root value.
 /// Used by the GC mark phase to find all stack roots.
 pub unsafe fn scan_roots(mut callback: impl FnMut(u64)) {

@@ -41,12 +41,33 @@ impl LowerCtx {
         }
         let strings_array = HirExpr::ArrayLit(strings_exprs);
 
-        let mut call_args = vec![strings_array];
+        // Bundle interpolated values into a single array argument
+        // so that `tag\`...\`` becomes `tag(strings, [val1, val2, ...])`
+        // matching the `...values` rest parameter convention.
+        let mut values_exprs = Vec::new();
         for expr in &tt.tpl.exprs {
-            call_args.push(self.lower_expr(expr)?);
+            values_exprs.push(self.lower_expr(expr)?);
         }
+        let values_array = HirExpr::ArrayLit(values_exprs);
 
-        let callee = self.lower_expr(&tt.tag)?;
+        let call_args = vec![strings_array, values_array];
+
+        let callee = match &*tt.tag {
+            Expr::Ident(id) => {
+                let name = id.sym.to_string();
+                if self.function_names.contains(&name) {
+                    HirExpr::GlobalRef(name)
+                } else if let Some(aliased) = self.function_aliases.get(&name) {
+                    HirExpr::GlobalRef(aliased.clone())
+                } else {
+                    self.lookup(&name)
+                        .map(HirExpr::Var)
+                        .unwrap_or_else(|| HirExpr::GlobalRef(name))
+                }
+            }
+            _ => self.lower_expr(&tt.tag)?,
+        };
+
         Ok(HirExpr::Call {
             callee: Box::new(callee),
             args: call_args,
