@@ -240,65 +240,34 @@ impl LowerCtx {
                         self.function_stack.push(func_id);
                         self.push_scope();
                         let mut params = Vec::new();
-                        for p in &fn_decl.params.items {
-                            if let BindingPattern::BindingIdentifier(ident) = &p.pattern {
-                                let pname = ident.name.to_string();
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname));
-                            }
-                        }
-                        if let Some(rest) = &fn_decl.params.rest {
-                            if let BindingPattern::BindingIdentifier(ident) = &rest.rest.argument {
-                                let pname = ident.name.to_string();
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname));
-                            }
-                        }
+                        let mut param_destruct_stmts = Vec::new();
+                        self.lower_formal_parameters(&fn_decl.params, &mut params, &mut param_destruct_stmts)?;
+
                         let body = match &fn_decl.body {
                             Some(b) => self.lower_function_body(b)?,
                             None => Vec::new(),
                         };
+                        let mut full_body = param_destruct_stmts;
+                        full_body.extend(body);
+
                         self.pop_scope();
                         self.function_stack.pop();
                         
                         self.functions.push(HirFunction {
                             id: func_id,
                             name: name.clone(),
-                            params,
-                            body,
+                            params: params.clone(),
+                            body: full_body.clone(),
                             captures: Vec::new(),
                             is_generator: fn_decl.generator,
                             is_async: fn_decl.r#async,
                         });
                         
-                        let mut hir_params = Vec::new();
-                        for p in &fn_decl.params.items {
-                            if let BindingPattern::BindingIdentifier(ident) = &p.pattern {
-                                let pname = ident.name.to_string();
-                                if let Some(pid) = self.lookup(&pname) {
-                                    hir_params.push((pid, pname));
-                                }
-                            }
-                        }
-                        if let Some(rest) = &fn_decl.params.rest {
-                            if let BindingPattern::BindingIdentifier(ident) = &rest.rest.argument {
-                                let pname = ident.name.to_string();
-                                if let Some(pid) = self.lookup(&pname) {
-                                    hir_params.push((pid, pname));
-                                }
-                            }
-                        }
-
-                        let body_copy = match &fn_decl.body {
-                            Some(b) => self.lower_function_body(b)?,
-                            None => Vec::new(),
-                        };
-
                         out.push(HirStmt::FuncDecl {
                             id: func_id,
                             name: name.clone(),
-                            params: hir_params,
-                            body: body_copy,
+                            params,
+                            body: full_body,
                         });
                         
                         self.exports.default = Some(binding);

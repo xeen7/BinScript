@@ -16,6 +16,44 @@ impl LowerCtx {
         }
     }
 
+    pub(crate) fn lower_formal_parameters(
+        &mut self,
+        formal_parameters: &oxc::ast::ast::FormalParameters<'_>,
+        params_out: &mut Vec<(BindingId, String)>,
+        destruct_stmts_out: &mut Vec<HirStmt>,
+    ) -> CompileResult<()> {
+        let offset = params_out.len();
+        for (i, p) in formal_parameters.items.iter().enumerate() {
+            let param_idx = offset + i;
+            if let BindingPattern::BindingIdentifier(ident) = &p.pattern {
+                let pname = ident.name.to_string();
+                let pid = self.declare(&pname);
+                params_out.push((pid, pname));
+            } else {
+                let pname = format!("_param_{}", param_idx);
+                let pid = self.declare(&pname);
+                params_out.push((pid, pname.clone()));
+                self.lower_pattern(&p.pattern, HirExpr::Var(pid), destruct_stmts_out)?;
+            }
+        }
+        if let Some(rest) = &formal_parameters.rest {
+            match &rest.rest.argument {
+                BindingPattern::BindingIdentifier(ident) => {
+                    let pname = ident.name.to_string();
+                    let pid = self.declare(&pname);
+                    params_out.push((pid, pname));
+                }
+                other_pat => {
+                    let pname = format!("_param_{}", params_out.len());
+                    let pid = self.declare(&pname);
+                    params_out.push((pid, pname.clone()));
+                    self.lower_pattern(other_pat, HirExpr::Var(pid), destruct_stmts_out)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn lower_pattern(&mut self, pat: &BindingPattern, base_expr: HirExpr, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         match pat {
             BindingPattern::BindingIdentifier(binding_ident) => {

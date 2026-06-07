@@ -62,36 +62,7 @@ impl LowerCtx {
                 self.push_scope();
                 let mut params = Vec::new();
                 let mut param_destruct_stmts = Vec::new();
-                for (param_idx, p) in fn_decl.params.items.iter().enumerate() {
-                    match &p.pattern {
-                        BindingPattern::BindingIdentifier(ident) => {
-                            let pname = ident.name.to_string();
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname));
-                        }
-                        other_pat => {
-                            let pname = format!("_param_{}", param_idx);
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname.clone()));
-                            self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                        }
-                    }
-                }
-                if let Some(rest) = &fn_decl.params.rest {
-                    match &rest.rest.argument {
-                        BindingPattern::BindingIdentifier(ident) => {
-                            let pname = ident.name.to_string();
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname));
-                        }
-                        other_pat => {
-                            let pname = format!("_param_{}", params.len());
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname.clone()));
-                            self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                        }
-                    }
-                }
+                self.lower_formal_parameters(&fn_decl.params, &mut params, &mut param_destruct_stmts)?;
                 let body = match &fn_decl.body {
                     Some(b) => self.lower_function_body(b)?,
                     None => Vec::new(),
@@ -237,36 +208,7 @@ impl LowerCtx {
             
             let mut params = vec![(this_id, "this".to_string())];
             let mut param_destruct_stmts = Vec::new();
-            for (param_idx, p) in ctor.value.params.items.iter().enumerate() {
-                match &p.pattern {
-                    BindingPattern::BindingIdentifier(ident) => {
-                        let pname = ident.name.to_string();
-                        let pid = self.declare(&pname);
-                        params.push((pid, pname));
-                    }
-                    other_pat => {
-                        let pname = format!("_param_{}", param_idx);
-                        let pid = self.declare(&pname);
-                        params.push((pid, pname.clone()));
-                        self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                    }
-                }
-                if let Some(rest) = &ctor.value.params.rest {
-                    match &rest.rest.argument {
-                        BindingPattern::BindingIdentifier(ident) => {
-                            let pname = ident.name.to_string();
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname));
-                        }
-                        other_pat => {
-                            let pname = format!("_param_{}", params.len());
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname.clone()));
-                            self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                        }
-                    }
-                }
-            }
+            self.lower_formal_parameters(&ctor.value.params, &mut params, &mut param_destruct_stmts)?;
 
             let body = match &ctor.value.body {
                 Some(b) => self.lower_function_body(b)?,
@@ -369,36 +311,7 @@ impl LowerCtx {
 
                     let mut params = vec![(this_id, "this".to_string())];
                     let mut param_destruct_stmts = Vec::new();
-                    for (param_idx, p) in m.value.params.items.iter().enumerate() {
-                        match &p.pattern {
-                            BindingPattern::BindingIdentifier(ident) => {
-                                let pname = ident.name.to_string();
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname));
-                            }
-                            other_pat => {
-                                let pname = format!("_param_{}", param_idx);
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname.clone()));
-                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                            }
-                        }
-                    }
-                    if let Some(rest) = &m.value.params.rest {
-                        match &rest.rest.argument {
-                            BindingPattern::BindingIdentifier(ident) => {
-                                let pname = ident.name.to_string();
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname));
-                            }
-                            other_pat => {
-                                let pname = format!("_param_{}", params.len());
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname.clone()));
-                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                            }
-                        }
-                    }
+                    self.lower_formal_parameters(&m.value.params, &mut params, &mut param_destruct_stmts)?;
 
                     let body = match &m.value.body {
                         Some(b) => self.lower_function_body(b)?,
@@ -443,36 +356,7 @@ impl LowerCtx {
 
                     let mut params = Vec::new();
                     let mut param_destruct_stmts = Vec::new();
-                    for (param_idx, p) in m.value.params.items.iter().enumerate() {
-                        match &p.pattern {
-                            BindingPattern::BindingIdentifier(ident) => {
-                                let pname = ident.name.to_string();
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname));
-                            }
-                            other_pat => {
-                                let pname = format!("_param_{}", param_idx);
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname.clone()));
-                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                            }
-                        }
-                    }
-                    if let Some(rest) = &m.value.params.rest {
-                        match &rest.rest.argument {
-                            BindingPattern::BindingIdentifier(ident) => {
-                                let pname = ident.name.to_string();
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname));
-                            }
-                            other_pat => {
-                                let pname = format!("_param_{}", params.len());
-                                let pid = self.declare(&pname);
-                                params.push((pid, pname.clone()));
-                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                            }
-                        }
-                    }
+                    self.lower_formal_parameters(&m.value.params, &mut params, &mut param_destruct_stmts)?;
 
                     let body = match &m.value.body {
                         Some(b) => self.lower_function_body(b)?,

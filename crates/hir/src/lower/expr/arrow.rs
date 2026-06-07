@@ -14,33 +14,7 @@ impl LowerCtx {
         
         let mut params = Vec::new();
         let mut param_destruct_stmts = Vec::new();
-        for (param_idx, p) in arrow.params.items.iter().enumerate() {
-            if let BindingPattern::BindingIdentifier(ident) = &p.pattern {
-                let pname = ident.name.to_string();
-                let pid = self.declare(&pname);
-                params.push((pid, pname));
-            } else {
-                let pname = format!("_param_{}", param_idx);
-                let pid = self.declare(&pname);
-                params.push((pid, pname.clone()));
-                self.lower_pattern(&p.pattern, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-            }
-        }
-        if let Some(rest) = &arrow.params.rest {
-            match &rest.rest.argument {
-                BindingPattern::BindingIdentifier(ident) => {
-                    let pname = ident.name.to_string();
-                    let pid = self.declare(&pname);
-                    params.push((pid, pname));
-                }
-                other_pat => {
-                    let pname = format!("_param_{}", params.len());
-                    let pid = self.declare(&pname);
-                    params.push((pid, pname.clone()));
-                    self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
-                }
-            }
-        }
+        self.lower_formal_parameters(&arrow.params, &mut params, &mut param_destruct_stmts)?;
         
         let body = if arrow.expression && arrow.body.statements.len() == 1 {
             if let Statement::ExpressionStatement(expr_stmt) = &arrow.body.statements[0] {
