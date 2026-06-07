@@ -1,29 +1,29 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::{CompileError, CompileResult};
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_expr_lit(&self, lit: &Lit) -> CompileResult<HirExpr> {
-        match lit {
-            Lit::Num(n) => Ok(HirExpr::Lit(Literal::Number(n.value))),
-            Lit::Str(s) => Ok(HirExpr::Lit(Literal::String(
-                s.value.as_wtf8().to_string_lossy().into_owned(),
+    pub(super) fn lower_expr_lit(&self, expr: &Expression) -> CompileResult<HirExpr> {
+        match expr {
+            Expression::NumericLiteral(n) => Ok(HirExpr::Lit(Literal::Number(n.value))),
+            Expression::StringLiteral(s) => Ok(HirExpr::Lit(Literal::String(
+                s.value.to_string(),
             ))),
-            Lit::Bool(b) => Ok(HirExpr::Lit(Literal::Bool(b.value))),
-            Lit::Null(_) => Ok(HirExpr::Lit(Literal::Null)),
-            Lit::Regex(r) => {
+            Expression::BooleanLiteral(b) => Ok(HirExpr::Lit(Literal::Bool(b.value))),
+            Expression::NullLiteral(_) => Ok(HirExpr::Lit(Literal::Null)),
+            Expression::RegExpLiteral(r) => {
                 Ok(HirExpr::Call {
                     callee: Box::new(HirExpr::GlobalRef("__bs_RegExp_new".to_string())),
                     args: vec![
-                        HirExpr::Lit(Literal::String(r.exp.to_string())),
-                        HirExpr::Lit(Literal::String(r.flags.to_string())),
+                        HirExpr::Lit(Literal::String(r.regex.pattern.text.to_string())),
+                        HirExpr::Lit(Literal::String(r.regex.flags.to_string())),
                     ],
                 })
             }
-            Lit::BigInt(b) => {
-                let parsed = format!("{}", b.value).parse::<f64>().unwrap_or(0.0);
+            Expression::BigIntLiteral(b) => {
+                let parsed = b.value.to_string().parse::<f64>().unwrap_or(0.0);
                 Ok(HirExpr::Lit(Literal::Number(parsed)))
             }
             _ => Err(CompileError::Lowering {

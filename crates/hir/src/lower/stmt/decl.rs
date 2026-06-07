@@ -1,25 +1,25 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::CompileResult;
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_stmt_decl(&mut self, decl: &Decl, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    pub(super) fn lower_stmt_decl(&mut self, decl: &Declaration, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         self.lower_decl(decl, out)
     }
 
-    pub(crate) fn lower_decl(&mut self, decl: &Decl, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    pub(crate) fn lower_decl(&mut self, decl: &Declaration, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         match decl {
-            Decl::Var(var) => {
-                for d in &var.decls {
-                    match &d.name {
-                        Pat::Ident(ident) => {
-                            let name = ident.sym.to_string();
+            Declaration::VariableDeclaration(var) => {
+                for d in &var.declarations {
+                    match &d.id {
+                        BindingPattern::BindingIdentifier(ident) => {
+                            let name = ident.name.to_string();
                             let binding = self.declare(&name);
                             let init = match &d.init {
                                 Some(e) => {
-                                    if let Expr::Class(ce) = &**e {
+                                    if let Expression::ClassExpression(ce) = e {
                                         Some(self.lower_expr_class_with_name(ce, name.clone())?)
                                     } else {
                                         Some(self.lower_expr(e)?)
@@ -50,8 +50,8 @@ impl LowerCtx {
                 }
                 Ok(())
             }
-            Decl::Fn(fn_decl) => {
-                let name = fn_decl.ident.sym.to_string();
+            Declaration::FunctionDeclaration(fn_decl) => {
+                let name = fn_decl.id.as_ref().map(|id| id.name.to_string()).unwrap_or_default();
                 let func_id = self.fresh_func_id();
                 // Register the function name in the current scope
                 let binding = self.declare(&name);
@@ -62,10 +62,10 @@ impl LowerCtx {
                 self.push_scope();
                 let mut params = Vec::new();
                 let mut param_destruct_stmts = Vec::new();
-                for (param_idx, p) in fn_decl.function.params.iter().enumerate() {
-                    match &p.pat {
-                        Pat::Ident(ident) => {
-                            let pname = ident.sym.to_string();
+                for (param_idx, p) in fn_decl.params.items.iter().enumerate() {
+                    match &p.pattern {
+                        BindingPattern::BindingIdentifier(ident) => {
+                            let pname = ident.name.to_string();
                             let pid = self.declare(&pname);
                             params.push((pid, pname));
                         }
@@ -77,8 +77,23 @@ impl LowerCtx {
                         }
                     }
                 }
-                let body = match &fn_decl.function.body {
-                    Some(b) => self.lower_block_stmts(b)?,
+                if let Some(rest) = &fn_decl.params.rest {
+                    match &rest.rest.argument {
+                        BindingPattern::BindingIdentifier(ident) => {
+                            let pname = ident.name.to_string();
+                            let pid = self.declare(&pname);
+                            params.push((pid, pname));
+                        }
+                        other_pat => {
+                            let pname = format!("_param_{}", params.len());
+                            let pid = self.declare(&pname);
+                            params.push((pid, pname.clone()));
+                            self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                        }
+                    }
+                }
+                let body = match &fn_decl.body {
+                    Some(b) => self.lower_function_body(b)?,
                     None => Vec::new(),
                 };
                 let mut full_body = param_destruct_stmts;
@@ -92,8 +107,8 @@ impl LowerCtx {
                     params: params.clone(),
                     body: full_body.clone(),
                     captures: Vec::new(),
-                    is_generator: fn_decl.function.is_generator,
-                    is_async: fn_decl.function.is_async,
+                    is_generator: fn_decl.generator,
+                    is_async: fn_decl.r#async,
                 });
                 
                 if self.function_stack.len() > 1 {
@@ -114,18 +129,18 @@ impl LowerCtx {
                 }
                 Ok(())
             }
-            Decl::Class(class_decl) => self.lower_class_decl(class_decl, out),
+            Declaration::ClassDeclaration(class_decl) => self.lower_class_decl(class_decl, None, out),
             _ => Ok(()),
         }
     }
 
-    fn lower_class_decl(&mut self, class_decl: &ClassDecl, _out: &mut Vec<HirStmt>) -> CompileResult<()> {
-        let class_name = class_decl.ident.sym.to_string();
+    pub(crate) fn lower_class_decl(&mut self, class_decl: &Class, name_override: Option<String>, _out: &mut Vec<HirStmt>) -> CompileResult<()> {
+        let class_name = name_override.unwrap_or_else(|| class_decl.id.as_ref().map(|id| id.name.to_string()).unwrap_or_default());
         let binding = self.declare(&class_name);
         
-        let super_name = class_decl.class.super_class.as_ref().and_then(|expr| {
-            if let Expr::Ident(id) = &**expr {
-                Some(id.sym.to_string())
+        let super_name = class_decl.super_class.as_ref().and_then(|expr| {
+            if let Expression::Identifier(id) = expr {
+                Some(id.name.to_string())
             } else {
                 None
             }
@@ -150,14 +165,14 @@ impl LowerCtx {
         let mut instance_field_inits: Vec<(String, Option<HirExpr>)> = Vec::new();
 
         // Collect fields first
-        for member in &class_decl.class.body {
+        for member in &class_decl.body.body {
             match member {
-                ClassMember::StaticBlock(sb) => {
-                    static_blocks.push(sb.clone());
+                ClassElement::StaticBlock(sb) => {
+                    static_blocks.push(sb);
                 }
-                ClassMember::ClassProp(prop) => {
+                ClassElement::PropertyDefinition(prop) => {
                     let name = self.prop_name_to_string(&prop.key);
-                    if !prop.is_static {
+                    if !prop.r#static {
                         let init = match &prop.value {
                             Some(e) => Some(self.lower_expr(e)?),
                             None => None,
@@ -172,80 +187,37 @@ impl LowerCtx {
                         static_fields.push((name, init));
                     }
                 }
-                ClassMember::Constructor(ctor) => {
-                    explicit_constructor = Some(ctor.clone());
-                }
-                ClassMember::Method(method) => {
-                    let base_name = self.prop_name_to_string(&method.key);
-                    let name = match method.kind {
-                        MethodKind::Getter => {
-                            if !method.is_static {
-                                getters.push(base_name.clone());
-                            } else {
-                                static_getters.push(base_name.clone());
-                            }
-                            format!("__get_{}", base_name)
-                        }
-                        MethodKind::Setter => {
-                            if !method.is_static {
-                                setters.push(base_name.clone());
-                            } else {
-                                static_setters.push(base_name.clone());
-                            }
-                            format!("__set_{}", base_name)
-                        }
-                        MethodKind::Method => base_name,
-                    };
-                    let func_id = self.fresh_func_id();
-                    if !method.is_static {
-                        methods.push(HirMethod { name, func_id });
+                ClassElement::MethodDefinition(method) => {
+                    if method.kind == MethodDefinitionKind::Constructor {
+                        explicit_constructor = Some(method);
                     } else {
-                        static_methods.push(HirMethod { name, func_id });
-                    }
-                }
-                ClassMember::PrivateProp(prop) => {
-                    let name = format!("__private_{}", prop.key.name);
-                    if !prop.is_static {
-                        let init = match &prop.value {
-                            Some(e) => Some(self.lower_expr(e)?),
-                            None => None,
+                        let base_name = self.prop_name_to_string(&method.key);
+                        let name = match method.kind {
+                            MethodDefinitionKind::Get => {
+                                if !method.r#static {
+                                    getters.push(base_name.clone());
+                                } else {
+                                    static_getters.push(base_name.clone());
+                                }
+                                format!("__get_{}", base_name)
+                            }
+                            MethodDefinitionKind::Set => {
+                                if !method.r#static {
+                                    setters.push(base_name.clone());
+                                } else {
+                                    static_setters.push(base_name.clone());
+                                }
+                                format!("__set_{}", base_name)
+                            }
+                            MethodDefinitionKind::Method => base_name,
+                            _ => base_name, // Constructor handled above
                         };
-                        own_fields.push(name.clone());
-                        instance_field_inits.push((name, init));
-                    } else {
-                        let init = match &prop.value {
-                            Some(e) => Some(self.lower_expr(e)?),
-                            None => None,
-                        };
-                        static_fields.push((name, init));
-                    }
-                }
-                ClassMember::PrivateMethod(method) => {
-                    let base_name = format!("__private_{}", method.key.name);
-                    let name = match method.kind {
-                        MethodKind::Getter => {
-                            if !method.is_static {
-                                getters.push(base_name.clone());
-                            } else {
-                                static_getters.push(base_name.clone());
-                            }
-                            format!("__get_{}", base_name)
+                        let func_id = self.fresh_func_id();
+                        if !method.r#static {
+                            methods.push(HirMethod { name, func_id });
+                        } else {
+                            static_methods.push(HirMethod { name, func_id });
                         }
-                        MethodKind::Setter => {
-                            if !method.is_static {
-                                setters.push(base_name.clone());
-                            } else {
-                                static_setters.push(base_name.clone());
-                            }
-                            format!("__set_{}", base_name)
-                        }
-                        MethodKind::Method => base_name,
-                    };
-                    let func_id = self.fresh_func_id();
-                    if !method.is_static {
-                        methods.push(HirMethod { name, func_id });
-                    } else {
-                        static_methods.push(HirMethod { name, func_id });
                     }
                 }
                 _ => {}
@@ -265,16 +237,29 @@ impl LowerCtx {
             
             let mut params = vec![(this_id, "this".to_string())];
             let mut param_destruct_stmts = Vec::new();
-            for (param_idx, p) in ctor.params.iter().enumerate() {
-                if let ParamOrTsParamProp::Param(param) = p {
-                    match &param.pat {
-                        Pat::Ident(ident) => {
-                            let pname = ident.sym.to_string();
+            for (param_idx, p) in ctor.value.params.items.iter().enumerate() {
+                match &p.pattern {
+                    BindingPattern::BindingIdentifier(ident) => {
+                        let pname = ident.name.to_string();
+                        let pid = self.declare(&pname);
+                        params.push((pid, pname));
+                    }
+                    other_pat => {
+                        let pname = format!("_param_{}", param_idx);
+                        let pid = self.declare(&pname);
+                        params.push((pid, pname.clone()));
+                        self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                    }
+                }
+                if let Some(rest) = &ctor.value.params.rest {
+                    match &rest.rest.argument {
+                        BindingPattern::BindingIdentifier(ident) => {
+                            let pname = ident.name.to_string();
                             let pid = self.declare(&pname);
                             params.push((pid, pname));
                         }
                         other_pat => {
-                            let pname = format!("_param_{}", param_idx);
+                            let pname = format!("_param_{}", params.len());
                             let pid = self.declare(&pname);
                             params.push((pid, pname.clone()));
                             self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
@@ -283,8 +268,8 @@ impl LowerCtx {
                 }
             }
 
-            let body = match &ctor.body {
-                Some(b) => self.lower_block_stmts(b)?,
+            let body = match &ctor.value.body {
+                Some(b) => self.lower_function_body(b)?,
                 None => Vec::new(),
             };
             // Inject instance field initializers at the start of the constructor body
@@ -363,126 +348,152 @@ impl LowerCtx {
         };
 
         // Lower methods
-        for member in &class_decl.class.body {
-            let (is_static, key_id_sym, method_kind, function) = match member {
-                ClassMember::Method(m) => (m.is_static, self.prop_name_to_string(&m.key), m.kind, &m.function),
-                ClassMember::PrivateMethod(m) => (m.is_static, format!("__private_{}", m.key.name), m.kind, &m.function),
-                _ => continue,
-            };
-            if !is_static {
-                let base_name = key_id_sym;
-                let m_name = match method_kind {
-                    MethodKind::Getter => format!("__get_{}", base_name),
-                    MethodKind::Setter => format!("__set_{}", base_name),
-                    MethodKind::Method => base_name,
-                };
-                let m_func = methods.iter().find(|m| m.name == m_name).unwrap();
-                let func_name = format!("__bs_class_{}_{}", class_name, m_name);
+        for member in &class_decl.body.body {
+            if let ClassElement::MethodDefinition(m) = member {
+                if !m.r#static && m.kind != MethodDefinitionKind::Constructor {
+                    let base_name = self.prop_name_to_string(&m.key);
+                    let m_name = match m.kind {
+                        MethodDefinitionKind::Get => format!("__get_{}", base_name),
+                        MethodDefinitionKind::Set => format!("__set_{}", base_name),
+                        MethodDefinitionKind::Method => base_name,
+                        _ => base_name,
+                    };
+                    let m_func = methods.iter().find(|meth| meth.name == m_name).unwrap();
+                    let func_name = format!("__bs_class_{}_{}", class_name, m_name);
 
-                self.function_stack.push(m_func.func_id);
-                self.push_scope();
-                let this_id = self.declare("this");
-                let old_this = self.this_binding;
-                self.this_binding = Some(this_id);
+                    self.function_stack.push(m_func.func_id);
+                    self.push_scope();
+                    let this_id = self.declare("this");
+                    let old_this = self.this_binding;
+                    self.this_binding = Some(this_id);
 
-                let mut params = vec![(this_id, "this".to_string())];
-                let mut param_destruct_stmts = Vec::new();
-                for (param_idx, p) in function.params.iter().enumerate() {
-                    match &p.pat {
-                        Pat::Ident(ident) => {
-                            let pname = ident.sym.to_string();
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname));
-                        }
-                        other_pat => {
-                            let pname = format!("_param_{}", param_idx);
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname.clone()));
-                            self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                    let mut params = vec![(this_id, "this".to_string())];
+                    let mut param_destruct_stmts = Vec::new();
+                    for (param_idx, p) in m.value.params.items.iter().enumerate() {
+                        match &p.pattern {
+                            BindingPattern::BindingIdentifier(ident) => {
+                                let pname = ident.name.to_string();
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname));
+                            }
+                            other_pat => {
+                                let pname = format!("_param_{}", param_idx);
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname.clone()));
+                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                            }
                         }
                     }
+                    if let Some(rest) = &m.value.params.rest {
+                        match &rest.rest.argument {
+                            BindingPattern::BindingIdentifier(ident) => {
+                                let pname = ident.name.to_string();
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname));
+                            }
+                            other_pat => {
+                                let pname = format!("_param_{}", params.len());
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname.clone()));
+                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                            }
+                        }
+                    }
+
+                    let body = match &m.value.body {
+                        Some(b) => self.lower_function_body(b)?,
+                        None => Vec::new(),
+                    };
+                    let mut full_body = param_destruct_stmts;
+                    full_body.extend(body);
+
+                    self.this_binding = old_this;
+                    self.pop_scope();
+                    self.function_stack.pop();
+
+                    self.functions.push(HirFunction {
+                        id: m_func.func_id,
+                        name: func_name,
+                        params,
+                        body: full_body,
+                        captures: Vec::new(),
+                        is_generator: m.value.generator,
+                        is_async: m.value.r#async,
+                    });
                 }
-
-                let body = match &function.body {
-                    Some(b) => self.lower_block_stmts(b)?,
-                    None => Vec::new(),
-                };
-                let mut full_body = param_destruct_stmts;
-                full_body.extend(body);
-
-                self.this_binding = old_this;
-                self.pop_scope();
-                self.function_stack.pop();
-
-                self.functions.push(HirFunction {
-                    id: m_func.func_id,
-                    name: func_name,
-                    params,
-                    body: full_body,
-                    captures: Vec::new(),
-                    is_generator: function.is_generator,
-                    is_async: function.is_async,
-                });
             }
         }
 
         // Lower static methods
-        for member in &class_decl.class.body {
-            let (is_static, key_id_sym, method_kind, function) = match member {
-                ClassMember::Method(m) => (m.is_static, self.prop_name_to_string(&m.key), m.kind, &m.function),
-                ClassMember::PrivateMethod(m) => (m.is_static, format!("__private_{}", m.key.name), m.kind, &m.function),
-                _ => continue,
-            };
-            if is_static {
-                let base_name = key_id_sym;
-                let m_name = match method_kind {
-                    MethodKind::Getter => format!("__get_{}", base_name),
-                    MethodKind::Setter => format!("__set_{}", base_name),
-                    MethodKind::Method => base_name,
-                };
-                let m_func = static_methods.iter().find(|m| m.name == m_name).unwrap();
-                let func_name = format!("__bs_class_{}_static_{}", class_name, m_name);
+        for member in &class_decl.body.body {
+            if let ClassElement::MethodDefinition(m) = member {
+                if m.r#static {
+                    let base_name = self.prop_name_to_string(&m.key);
+                    let m_name = match m.kind {
+                        MethodDefinitionKind::Get => format!("__get_{}", base_name),
+                        MethodDefinitionKind::Set => format!("__set_{}", base_name),
+                        MethodDefinitionKind::Method => base_name,
+                        _ => base_name,
+                    };
+                    let m_func = static_methods.iter().find(|meth| meth.name == m_name).unwrap();
+                    let func_name = format!("__bs_class_{}_static_{}", class_name, m_name);
 
-                self.function_stack.push(m_func.func_id);
-                self.push_scope();
+                    self.function_stack.push(m_func.func_id);
+                    self.push_scope();
 
-                let mut params = Vec::new();
-                let mut param_destruct_stmts = Vec::new();
-                for (param_idx, p) in function.params.iter().enumerate() {
-                    match &p.pat {
-                        Pat::Ident(ident) => {
-                            let pname = ident.sym.to_string();
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname));
-                        }
-                        other_pat => {
-                            let pname = format!("_param_{}", param_idx);
-                            let pid = self.declare(&pname);
-                            params.push((pid, pname.clone()));
-                            self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                    let mut params = Vec::new();
+                    let mut param_destruct_stmts = Vec::new();
+                    for (param_idx, p) in m.value.params.items.iter().enumerate() {
+                        match &p.pattern {
+                            BindingPattern::BindingIdentifier(ident) => {
+                                let pname = ident.name.to_string();
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname));
+                            }
+                            other_pat => {
+                                let pname = format!("_param_{}", param_idx);
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname.clone()));
+                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                            }
                         }
                     }
+                    if let Some(rest) = &m.value.params.rest {
+                        match &rest.rest.argument {
+                            BindingPattern::BindingIdentifier(ident) => {
+                                let pname = ident.name.to_string();
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname));
+                            }
+                            other_pat => {
+                                let pname = format!("_param_{}", params.len());
+                                let pid = self.declare(&pname);
+                                params.push((pid, pname.clone()));
+                                self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+                            }
+                        }
+                    }
+
+                    let body = match &m.value.body {
+                        Some(b) => self.lower_function_body(b)?,
+                        None => Vec::new(),
+                    };
+                    let mut full_body = param_destruct_stmts;
+                    full_body.extend(body);
+
+                    self.pop_scope();
+                    self.function_stack.pop();
+
+                    self.functions.push(HirFunction {
+                        id: m_func.func_id,
+                        name: func_name,
+                        params,
+                        body: full_body,
+                        captures: Vec::new(),
+                        is_generator: m.value.generator,
+                        is_async: m.value.r#async,
+                    });
                 }
-
-                let body = match &function.body {
-                    Some(b) => self.lower_block_stmts(b)?,
-                    None => Vec::new(),
-                };
-                let mut full_body = param_destruct_stmts;
-                full_body.extend(body);
-
-                self.pop_scope();
-                self.function_stack.pop();
-
-                self.functions.push(HirFunction {
-                    id: m_func.func_id,
-                    name: func_name,
-                    params,
-                    body: full_body,
-                    captures: Vec::new(),
-                    is_generator: function.is_generator,
-                    is_async: function.is_async,
-                });
             }
         }
 
@@ -526,7 +537,10 @@ impl LowerCtx {
         let old_this = self.this_binding;
         self.this_binding = Some(binding);
         for sb in &static_blocks {
-            let stmts = self.lower_block_stmts(&sb.body)?;
+            let mut stmts = Vec::new();
+            for s in &sb.body {
+                self.lower_stmt(s, &mut stmts)?;
+            }
             _out.extend(stmts);
         }
         self.this_binding = old_this;

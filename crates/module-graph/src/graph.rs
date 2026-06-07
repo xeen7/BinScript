@@ -2,15 +2,15 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use petgraph::graph::{DiGraph, NodeIndex};
 use petgraph::algo::toposort as petgraph_toposort;
-use swc_core::ecma::ast::{Module, ModuleDecl, ModuleItem};
+use oxc::allocator::Allocator;
+use oxc::ast::ast::{Program, Statement};
 use diagnostics::{CompileError, CompileResult};
-use parser::parse_and_strip;
+use parser::parse_module;
 use crate::resolve::ModuleResolver;
 
 pub struct ModuleNode {
     pub path: PathBuf,
     pub source: String,
-    pub ast: Module,
 }
 
 pub struct ModuleGraph {
@@ -38,24 +38,25 @@ impl ModuleGraph {
             }
         })?;
 
-        let parse_res = parse_and_strip(&source, canonical_entry.to_str().unwrap_or("entry"))?;
+        let deps = {
+            let allocator = Allocator::default();
+            let program = parse_module(&allocator, &source, canonical_entry.to_str().unwrap_or("entry"))?;
+            get_module_dependencies(&program)
+        };
         
         let entry_node = ModuleNode {
             path: canonical_entry.clone(),
             source,
-            ast: parse_res.module,
         };
         
         let entry_index = graph.add_node(entry_node);
         path_to_index.insert(canonical_entry.clone(), entry_index);
-        queue.push_back((canonical_entry, entry_index));
+        queue.push_back((canonical_entry, entry_index, deps));
 
-        while let Some((current_path, current_index)) = queue.pop_front() {
-            let ast = &graph[current_index].ast;
-            let deps = get_module_dependencies(ast);
+        while let Some((current_path, current_index, current_deps)) = queue.pop_front() {
             let base_dir = current_path.parent().unwrap_or(Path::new("."));
 
-            for dep_specifier in deps {
+            for dep_specifier in current_deps {
                 let resolved_path = resolver.resolve(base_dir, &dep_specifier)?;
                 let resolved_path = std::fs::canonicalize(&resolved_path).unwrap_or(resolved_path);
 
@@ -67,17 +68,20 @@ impl ModuleGraph {
                             message: format!("Failed to read imported file '{}': {}", resolved_path.display(), e),
                         }
                     })?;
-                    let parse_res = parse_and_strip(&source, resolved_path.to_str().unwrap_or("dep"))?;
+                    let deps = {
+                        let allocator = Allocator::default();
+                        let program = parse_module(&allocator, &source, resolved_path.to_str().unwrap_or("dep"))?;
+                        get_module_dependencies(&program)
+                    };
                     
                     let node = ModuleNode {
                         path: resolved_path.clone(),
                         source,
-                        ast: parse_res.module,
                     };
                     
                     let idx = graph.add_node(node);
                     path_to_index.insert(resolved_path.clone(), idx);
-                    queue.push_back((resolved_path, idx));
+                    queue.push_back((resolved_path, idx, deps));
                     idx
                 };
 
@@ -110,24 +114,22 @@ impl ModuleGraph {
     }
 }
 
-fn get_module_dependencies(module: &Module) -> Vec<String> {
+fn get_module_dependencies(program: &Program) -> Vec<String> {
     let mut deps = Vec::new();
-    for item in &module.body {
-        if let ModuleItem::ModuleDecl(decl) = item {
-            match decl {
-                ModuleDecl::Import(import) => {
-                    deps.push(import.src.value.as_wtf8().to_string_lossy().into_owned());
-                }
-                ModuleDecl::ExportNamed(export) => {
-                    if let Some(src) = &export.src {
-                        deps.push(src.value.as_wtf8().to_string_lossy().into_owned());
-                    }
-                }
-                ModuleDecl::ExportAll(export) => {
-                    deps.push(export.src.value.as_wtf8().to_string_lossy().into_owned());
-                }
-                _ => {}
+    for stmt in &program.body {
+        match stmt {
+            Statement::ImportDeclaration(import) => {
+                deps.push(import.source.value.to_string());
             }
+            Statement::ExportNamedDeclaration(export) => {
+                if let Some(src) = &export.source {
+                    deps.push(src.value.to_string());
+                }
+            }
+            Statement::ExportAllDeclaration(export) => {
+                deps.push(export.source.value.to_string());
+            }
+            _ => {}
         }
     }
     deps

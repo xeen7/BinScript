@@ -1,21 +1,21 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::CompileResult;
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_stmt_for(&mut self, f: &ForStmt, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    pub(super) fn lower_stmt_for(&mut self, f: &ForStatement, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         self.lower_for(f, out)
     }
 
-    fn lower_for(&mut self, f: &ForStmt, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    fn lower_for(&mut self, f: &ForStatement, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         let init = match &f.init {
-            Some(VarDeclOrExpr::VarDecl(vd)) => {
+            Some(ForStatementInit::VariableDeclaration(vd)) => {
                 let mut inits = Vec::new();
-                for d in &vd.decls {
-                    if let Pat::Ident(ident) = &d.name {
-                        let name = ident.sym.to_string();
+                for d in &vd.declarations {
+                    if let BindingPattern::BindingIdentifier(ident) = &d.id {
+                        let name = ident.name.to_string();
                         let binding = self.declare(&name);
                         let init_expr = match &d.init {
                             Some(e) => Some(self.lower_expr(e)?),
@@ -30,11 +30,15 @@ impl LowerCtx {
                     Some(Box::new(HirStmt::Block(inits)))
                 }
             }
-            Some(VarDeclOrExpr::Expr(e)) => {
+            Some(init) if init.as_expression().is_some() => {
+                let e = init.as_expression().unwrap();
                 let expr = self.lower_expr(e)?;
                 Some(Box::new(HirStmt::Expr(expr)))
             }
             None => None,
+            _ => return Err(diagnostics::CompileError::Lowering {
+                message: "Unsupported for-loop init".into(),
+            }),
         };
         let cond = match &f.test {
             Some(e) => Some(self.lower_expr(e)?),

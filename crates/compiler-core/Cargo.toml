@@ -15,7 +15,7 @@ mir = { path = "../mir" }
 codegen-llvm = { path = "../codegen-llvm" }
 module-graph = { path = "../module-graph" }
 incremental = { path = "../incremental" }
-swc_core.workspace = true
+oxc.workspace = true
 inkwell.workspace = true
 clap.workspace = true
 tracing.workspace = true

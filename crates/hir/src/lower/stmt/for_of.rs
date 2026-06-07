@@ -1,22 +1,20 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::{CompileError, CompileResult};
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_stmt_for_of(&mut self, f: &ForOfStmt, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    pub(super) fn lower_stmt_for_of(&mut self, f: &ForOfStatement, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         let left = match &f.left {
-            ForHead::VarDecl(vd) => {
+            ForStatementLeft::VariableDeclaration(vd) => {
                 let mut inits = Vec::new();
-                for d in &vd.decls {
-                    if let Pat::Ident(ident) = &d.name {
-                        let name = ident.sym.to_string();
-                        let binding = self.declare(&name);
-                        // The init expression will be synthesized in MIR lowering.
-                        // We just create the let binding with no init here.
-                        inits.push(HirStmt::Let { binding, name, init: None });
-                    }
+                if let BindingPattern::BindingIdentifier(ident) = &vd.declarations[0].id {
+                    let name = ident.name.to_string();
+                    let binding = self.declare(&name);
+                    // The init expression will be synthesized in MIR lowering.
+                    // We just create the let binding with no init here.
+                    inits.push(HirStmt::Let { binding, name, init: None });
                 }
                 if inits.len() == 1 {
                     Box::new(inits.into_iter().next().unwrap())
@@ -24,10 +22,11 @@ impl LowerCtx {
                     Box::new(HirStmt::Block(inits))
                 }
             }
-            ForHead::Pat(pat) => {
-                // If it's `for (x of iter)`, left is Pat::Ident(x)
-                if let Pat::Ident(ident) = &**pat {
-                    let name = ident.sym.to_string();
+            left if left.as_assignment_target().is_some() => {
+                let target = left.as_assignment_target().unwrap();
+                // If it's `for (x of iter)`
+                if let AssignmentTarget::AssignmentTargetIdentifier(ident) = target {
+                    let name = ident.name.to_string();
                     let binding = self.lookup(&name).ok_or_else(|| CompileError::Lowering {
                         message: format!("Unknown variable {} in for..of", name),
                     })?;
@@ -42,17 +41,15 @@ impl LowerCtx {
                     });
                 }
             }
-            _ => {
-                return Err(CompileError::Lowering {
-                    message: "Unsupported for..of head".into(),
-                });
-            }
+            _ => return Err(CompileError::Lowering {
+                message: "Unsupported for..of left pattern".into(),
+            }),
         };
 
         let right = self.lower_expr(&f.right)?;
         let body = self.lower_stmt_to_vec(&f.body)?;
         
-        out.push(HirStmt::ForOf { left, right, body, is_await: f.is_await });
+        out.push(HirStmt::ForOf { left, right, body, is_await: f.r#await });
         Ok(())
     }
 }

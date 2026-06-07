@@ -6,7 +6,7 @@ edition.workspace = true
 [dependencies]
 diagnostics = { path = "../diagnostics" }
 parser = { path = "../parser" }
-swc_core = { workspace = true, features = ["common", "ecma_ast"] }
+oxc.workspace = true
 petgraph.workspace = true
 oxc_resolver.workspace = true
 thiserror.workspace = true

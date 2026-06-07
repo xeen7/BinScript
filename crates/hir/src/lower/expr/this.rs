@@ -1,11 +1,11 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::{CompileError, CompileResult};
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_expr_this(&self, _this: &ThisExpr) -> CompileResult<HirExpr> {
+    pub(super) fn lower_expr_this(&self, _this: &ThisExpression) -> CompileResult<HirExpr> {
         if let Some(this_id) = self.this_binding {
             Ok(HirExpr::Var(this_id))
         } else {

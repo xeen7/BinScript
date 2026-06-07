@@ -1,9 +1,9 @@
-//! SWC AST → HIR lowering.
+//! OXC AST → HIR lowering.
 //!
-//! Walks the SWC JavaScript AST (after TS type stripping) and produces
+//! Walks the OXC JavaScript AST and produces
 //! a simplified HIR suitable for further lowering to MIR.
 
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::CompileResult;
 
@@ -19,17 +19,17 @@ mod expr;
 mod stmt;
 
 pub(crate) use context::LowerCtx;
-pub(crate) use operators::{conv_bin_op, conv_unary_op};
+pub(crate) use operators::{conv_bin_op, conv_unary_op, conv_logical_op};
 
-/// Lowers an SWC `Module` into an `HirModule`.
-pub fn lower_module(module: &Module) -> CompileResult<HirModule> {
+/// Lowers an OXC `Program` into an `HirModule`.
+pub fn lower_module(program: &Program) -> CompileResult<HirModule> {
     let mut ctx = LowerCtx::new();
-    ctx.lower_module(module)
+    ctx.lower_module(program)
 }
 
 /// Lower a module with pre-resolved import bindings injected into scope.
 pub fn lower_module_with_imports(
-    module: &Module,
+    program: &Program,
     import_bindings: std::collections::HashMap<String, BindingId>,
     import_functions: std::collections::HashMap<String, String>,
     import_classes: std::collections::HashMap<String, String>,
@@ -48,5 +48,5 @@ pub fn lower_module_with_imports(
     ctx.function_aliases = import_functions;
     ctx.class_aliases = import_classes;
 
-    ctx.lower_module(module)
+    ctx.lower_module(program)
 }

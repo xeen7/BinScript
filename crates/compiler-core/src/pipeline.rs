@@ -5,9 +5,11 @@ use std::path::PathBuf;
 use inkwell::context::Context;
 use inkwell::OptimizationLevel;
 
-use swc_core::ecma::ast::{ModuleDecl, ModuleItem, ImportSpecifier, ModuleExportName};
+use oxc::allocator::Allocator;
+use oxc::ast::ast::{Statement, ImportDeclarationSpecifier, ModuleExportName};
 use module_graph::{ModuleGraph, ModuleResolver};
 use hir::{lower_module_with_imports, BindingId, FuncId, HirModule};
+use parser::parse_module;
 
 use rayon::prelude::*;
 
@@ -71,51 +73,56 @@ pub fn run(cfg: &CompileConfig) -> CompileResult<()> {
         
         tracing::info!("Lowering module: {}", current_path.display());
         
+        let allocator = Allocator::default();
+        let program = parse_module(&allocator, &node.source, current_path.to_str().unwrap_or("module"))?;
+        
         let mut import_bindings = HashMap::new();
         let mut import_functions = HashMap::new();
         let mut import_classes = HashMap::new();
         
         // Resolve imports using already compiled modules
-        for item in &node.ast.body {
-            if let ModuleItem::ModuleDecl(ModuleDecl::Import(import)) = item {
-                let specifier = import.src.value.as_wtf8().to_string_lossy().into_owned();
+        for stmt in &program.body {
+            if let Statement::ImportDeclaration(import) = stmt {
+                let specifier = import.source.value.to_string();
                 let dep_path = resolver.resolve(base_dir, &specifier)?;
                 let dep_path = std::fs::canonicalize(&dep_path).unwrap_or(dep_path);
                 
                 if let Some(dep_module) = compiled_modules.get(&dep_path) {
-                    for spec in &import.specifiers {
-                        match spec {
-                            ImportSpecifier::Named(named) => {
-                                let local = named.local.sym.to_string();
-                                let imported = match &named.imported {
-                                    Some(ModuleExportName::Ident(id)) => id.sym.to_string(),
-                                    Some(ModuleExportName::Str(s)) => s.value.as_wtf8().to_string_lossy().into_owned(),
-                                    None => local.clone(),
-                                };
-                                
-                                if let Some(&func_id) = dep_module.exports.functions.get(&imported) {
-                                    if let Some(f) = dep_module.functions.iter().find(|f| f.id == func_id) {
-                                        import_functions.insert(local.clone(), f.name.clone());
+                    if let Some(specifiers) = &import.specifiers {
+                        for spec in specifiers {
+                            match spec {
+                                ImportDeclarationSpecifier::ImportSpecifier(named) => {
+                                    let local = named.local.name.to_string();
+                                    let imported = match &named.imported {
+                                        ModuleExportName::IdentifierName(id) => id.name.to_string(),
+                                        ModuleExportName::IdentifierReference(id) => id.name.to_string(),
+                                        ModuleExportName::StringLiteral(s) => s.value.to_string(),
+                                    };
+                                    
+                                    if let Some(&func_id) = dep_module.exports.functions.get(&imported) {
+                                        if let Some(f) = dep_module.functions.iter().find(|f| f.id == func_id) {
+                                            import_functions.insert(local.clone(), f.name.clone());
+                                        }
+                                    } else if let Some(class_name) = dep_module.exports.classes.get(&imported) {
+                                        import_classes.insert(local.clone(), class_name.clone());
+                                    } else if let Some(&bid) = dep_module.exports.named.get(&imported) {
+                                        import_bindings.insert(local, bid);
                                     }
-                                } else if let Some(class_name) = dep_module.exports.classes.get(&imported) {
-                                    import_classes.insert(local.clone(), class_name.clone());
-                                } else if let Some(&bid) = dep_module.exports.named.get(&imported) {
-                                    import_bindings.insert(local, bid);
                                 }
-                            }
-                            ImportSpecifier::Default(default) => {
-                                let local = default.local.sym.to_string();
-                                if let Some(&func_id) = dep_module.exports.functions.get("default") {
-                                    if let Some(f) = dep_module.functions.iter().find(|f| f.id == func_id) {
-                                        import_functions.insert(local.clone(), f.name.clone());
+                                ImportDeclarationSpecifier::ImportDefaultSpecifier(default) => {
+                                    let local = default.local.name.to_string();
+                                    if let Some(&func_id) = dep_module.exports.functions.get("default") {
+                                        if let Some(f) = dep_module.functions.iter().find(|f| f.id == func_id) {
+                                            import_functions.insert(local.clone(), f.name.clone());
+                                        }
+                                    } else if let Some(class_name) = dep_module.exports.classes.get("default") {
+                                        import_classes.insert(local.clone(), class_name.clone());
+                                    } else if let Some(bid) = dep_module.exports.default {
+                                        import_bindings.insert(local, bid);
                                     }
-                                } else if let Some(class_name) = dep_module.exports.classes.get("default") {
-                                    import_classes.insert(local.clone(), class_name.clone());
-                                } else if let Some(bid) = dep_module.exports.default {
-                                    import_bindings.insert(local, bid);
                                 }
+                                _ => {}
                             }
-                            _ => {}
                         }
                     }
                 }
@@ -152,7 +159,7 @@ pub fn run(cfg: &CompileConfig) -> CompileResult<()> {
             module
         } else {
             let lowered = lower_module_with_imports(
-                &node.ast,
+                &program,
                 import_bindings,
                 import_functions,
                 import_classes,

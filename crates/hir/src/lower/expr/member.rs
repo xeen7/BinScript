@@ -1,16 +1,16 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::{CompileError, CompileResult};
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_expr_member(&mut self, m: &MemberExpr) -> CompileResult<HirExpr> {
-        if let Expr::Ident(id) = &*m.obj {
-            let obj_name = id.sym.to_string();
+    pub(super) fn lower_expr_member(&mut self, m: &MemberExpression) -> CompileResult<HirExpr> {
+        if let Expression::Identifier(id) = m.object() {
+            let obj_name = id.name.to_string();
             if obj_name == "Math" {
-                if let MemberProp::Ident(prop_id) = &m.prop {
-                    let prop_name = prop_id.sym.to_string();
+                if let MemberExpression::StaticMemberExpression(prop) = m {
+                    let prop_name = prop.property.name.to_string();
                     let val = match prop_name.as_str() {
                         "PI" => Some(std::f64::consts::PI),
                         "E" => Some(std::f64::consts::E),
@@ -27,8 +27,8 @@ impl LowerCtx {
                     }
                 }
             } else if obj_name == "Number" {
-                if let MemberProp::Ident(prop_id) = &m.prop {
-                    let prop_name = prop_id.sym.to_string();
+                if let MemberExpression::StaticMemberExpression(prop) = m {
+                    let prop_name = prop.property.name.to_string();
                     let val = match prop_name.as_str() {
                         "MAX_VALUE" => Some(std::f64::MAX),
                         "MIN_VALUE" => Some(std::f64::MIN_POSITIVE),
@@ -45,50 +45,36 @@ impl LowerCtx {
             }
         }
 
-        let obj = self.lower_expr(&m.obj)?;
-        match &m.prop {
-            MemberProp::Ident(prop_id) => {
+        let obj = self.lower_expr(m.object())?;
+        match m {
+            MemberExpression::StaticMemberExpression(prop) => {
                 Ok(HirExpr::MemberGet {
                     object: Box::new(obj),
-                    property: prop_id.sym.to_string(),
+                    property: prop.property.name.to_string(),
                 })
             }
-            MemberProp::Computed(computed) => {
-                let idx = self.lower_expr(&computed.expr)?;
+            MemberExpression::ComputedMemberExpression(computed) => {
+                let idx = self.lower_expr(&computed.expression)?;
                 Ok(HirExpr::IndexGet {
                     object: Box::new(obj),
                     index: Box::new(idx),
                 })
             }
-            MemberProp::PrivateName(pn) => {
+            MemberExpression::PrivateFieldExpression(pn) => {
                 Ok(HirExpr::MemberGet {
                     object: Box::new(obj),
-                    property: format!("__private_{}", pn.name),
+                    property: format!("__private_{}", pn.field.name),
                 })
             }
         }
     }
 
-    pub(super) fn lower_expr_super_prop(&mut self, sp: &SuperPropExpr) -> CompileResult<HirExpr> {
+    pub(super) fn lower_expr_super_prop(&mut self, _sp: &Expression) -> CompileResult<HirExpr> {
         if let Some(this_id) = self.this_binding {
-            match &sp.prop {
-                SuperProp::Ident(prop_id) => {
-                    Ok(HirExpr::MemberGet {
-                        object: Box::new(HirExpr::Var(this_id)),
-                        property: prop_id.sym.to_string(),
-                    })
-                }
-                SuperProp::Computed(computed) => {
-                    let idx = self.lower_expr(&computed.expr)?;
-                    Ok(HirExpr::IndexGet {
-                        object: Box::new(HirExpr::Var(this_id)),
-                        index: Box::new(idx),
-                    })
-                }
-            }
+            Ok(HirExpr::Var(this_id))
         } else {
             Err(CompileError::Lowering {
-                message: "super property access outside class method/constructor".into(),
+                message: "super used outside class method/constructor".into(),
             })
         }
     }

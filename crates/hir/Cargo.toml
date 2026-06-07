@@ -5,6 +5,6 @@ edition.workspace = true
 
 [dependencies]
 diagnostics = { path = "../diagnostics" }
-swc_core.workspace = true
+oxc.workspace = true
 serde.workspace = true
 bincode.workspace = true

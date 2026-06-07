@@ -1,12 +1,12 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::CompileResult;
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_expr_ident(&mut self, id: &Ident) -> CompileResult<HirExpr> {
-        let name = id.sym.to_string();
+    pub(super) fn lower_expr_ident(&mut self, id: &IdentifierReference) -> CompileResult<HirExpr> {
+        let name = id.name.to_string();
         if let Some(aliased) = self.function_aliases.get(&name) {
             Ok(HirExpr::GlobalRef(aliased.clone()))
         } else {

@@ -1,4 +1,4 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::CompileResult;
 use crate::types::*;
@@ -12,15 +12,27 @@ impl LowerCtx {
         self.push_scope();
         let mut params = Vec::new();
         let mut param_destruct_stmts = Vec::new();
-        for (param_idx, p) in function.params.iter().enumerate() {
-            match &p.pat {
-                Pat::Ident(ident) => {
-                    let pname = ident.sym.to_string();
+        for (param_idx, p) in function.params.items.iter().enumerate() {
+            if let BindingPattern::BindingIdentifier(ident) = &p.pattern {
+                let pname = ident.name.to_string();
+                let pid = self.declare(&pname);
+                params.push((pid, pname));
+            } else {
+                let pname = format!("_param_{}", param_idx);
+                let pid = self.declare(&pname);
+                params.push((pid, pname.clone()));
+                self.lower_pattern(&p.pattern, HirExpr::Var(pid), &mut param_destruct_stmts)?;
+            }
+        }
+        if let Some(rest) = &function.params.rest {
+            match &rest.rest.argument {
+                BindingPattern::BindingIdentifier(ident) => {
+                    let pname = ident.name.to_string();
                     let pid = self.declare(&pname);
                     params.push((pid, pname));
                 }
                 other_pat => {
-                    let pname = format!("_param_{}", param_idx);
+                    let pname = format!("_param_{}", params.len());
                     let pid = self.declare(&pname);
                     params.push((pid, pname.clone()));
                     self.lower_pattern(other_pat, HirExpr::Var(pid), &mut param_destruct_stmts)?;
@@ -29,7 +41,7 @@ impl LowerCtx {
         }
         
         let body = match &function.body {
-            Some(block) => self.lower_block_stmts(block)?,
+            Some(block) => self.lower_function_body(block)?,
             None => Vec::new(),
         };
         let mut full_body = param_destruct_stmts;
@@ -46,8 +58,8 @@ impl LowerCtx {
             params: params.clone(),
             body: full_body,
             captures: Vec::new(),
-            is_generator: function.is_generator,
-            is_async: function.is_async,
+            is_generator: function.generator,
+            is_async: function.r#async,
         });
 
         Ok(HirExpr::Closure {
@@ -56,10 +68,10 @@ impl LowerCtx {
         })
     }
 
-    pub(super) fn lower_expr_fn(&mut self, fn_expr: &FnExpr) -> CompileResult<HirExpr> {
-        let name = fn_expr.ident.as_ref()
-            .map(|id| id.sym.to_string())
+    pub(super) fn lower_expr_fn(&mut self, fn_expr: &Function) -> CompileResult<HirExpr> {
+        let name = fn_expr.id.as_ref()
+            .map(|id| id.name.to_string())
             .unwrap_or_else(|| format!("__bs_closure_{}", self.fresh_func_id()));
-        self.lower_function(&fn_expr.function, name)
+        self.lower_function(fn_expr, name)
     }
 }

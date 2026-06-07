@@ -1,11 +1,11 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::{CompileError, CompileResult};
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_stmt_for_in(&mut self, f: &ForInStmt, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    pub(super) fn lower_stmt_for_in(&mut self, f: &ForInStatement, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         // Evaluate the object
         let obj_expr = self.lower_expr(&f.right)?;
         
@@ -61,10 +61,10 @@ impl LowerCtx {
         
         // Bind the current key to the loop variable
         match &f.left {
-            ForHead::VarDecl(var_decl) => {
-                for d in &var_decl.decls {
-                    if let Pat::Ident(ident) = &d.name {
-                        let name = ident.sym.to_string();
+            ForStatementLeft::VariableDeclaration(var_decl) => {
+                for d in &var_decl.declarations {
+                    if let BindingPattern::BindingIdentifier(ident) = &d.id {
+                        let name = ident.name.to_string();
                         let binding = self.declare(&name);
                         loop_body.push(HirStmt::Let {
                             binding,
@@ -74,9 +74,10 @@ impl LowerCtx {
                     }
                 }
             }
-            ForHead::Pat(pat) => {
-                if let Pat::Ident(ident) = &**pat {
-                    let name = ident.sym.to_string();
+            left if left.as_assignment_target().is_some() => {
+                let target = left.as_assignment_target().unwrap();
+                if let AssignmentTarget::AssignmentTargetIdentifier(ident) = target {
+                    let name = ident.name.to_string();
                     let binding = self.lookup(&name).ok_or_else(|| CompileError::Lowering {
                         message: format!("Undefined variable in for-in: {}", name),
                     })?;
@@ -85,16 +86,20 @@ impl LowerCtx {
                         target: binding,
                         value: current_key.clone(),
                     });
+                } else {
+                    return Err(CompileError::Lowering {
+                        message: "Complex patterns in for-in not yet supported".into()
+                    })
                 }
             }
             _ => return Err(CompileError::Lowering {
-                message: "Complex patterns in for-in not yet supported".into()
-            })
+                message: "Unsupported for-in left pattern".into(),
+            }),
         }
         
         // Lower user loop body
-        match &*f.body {
-            Stmt::Block(b) => {
+        match &f.body {
+            Statement::BlockStatement(b) => {
                 let stmts = self.lower_block_stmts(b)?;
                 loop_body.extend(stmts);
             }

@@ -1,16 +1,16 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::{CompileError, CompileResult};
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_stmt_try(&mut self, t: &TryStmt, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    pub(super) fn lower_stmt_try(&mut self, t: &TryStatement, out: &mut Vec<HirStmt>) -> CompileResult<()> {
         let mut catch_param = None;
         if let Some(handler) = &t.handler {
             if let Some(param) = &handler.param {
-                if let Pat::Ident(binding_ident) = param {
-                    let name = binding_ident.id.sym.to_string();
+                if let BindingPattern::BindingIdentifier(binding_ident) = &param.pattern {
+                    let name = binding_ident.name.to_string();
                     let bid = self.next_binding;
                     self.next_binding += 1;
                     

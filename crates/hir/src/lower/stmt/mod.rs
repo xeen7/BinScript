@@ -1,4 +1,4 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::CompileResult;
 use crate::types::*;
@@ -22,30 +22,33 @@ mod try_stmt;
 mod switch_stmt;
 
 impl LowerCtx {
-    pub(crate) fn lower_stmt(&mut self, stmt: &Stmt, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+    pub(crate) fn lower_stmt(&mut self, stmt: &Statement, out: &mut Vec<HirStmt>) -> CompileResult<()> {
+        // In OXC, Declaration variants are flattened into Statement via inherit_variants!
+        if let Some(decl) = stmt.as_declaration() {
+            return self.lower_stmt_decl(decl, out);
+        }
         match stmt {
-            Stmt::Decl(decl) => self.lower_stmt_decl(decl, out),
-            Stmt::Expr(es) => self.lower_stmt_expr(es, out),
-            Stmt::If(if_s) => self.lower_stmt_if(if_s, out),
-            Stmt::While(w) => self.lower_stmt_while(w, out),
-            Stmt::For(f) => self.lower_stmt_for(f, out),
-            Stmt::ForOf(f) => self.lower_stmt_for_of(f, out),
-            Stmt::ForIn(f) => self.lower_stmt_for_in(f, out),
-            Stmt::Return(r) => self.lower_stmt_return(r, out),
-            Stmt::Block(b) => self.lower_stmt_block(b, out),
-            Stmt::Empty(e) => self.lower_stmt_empty(e, out),
-            Stmt::Break(b) => self.lower_stmt_break(b, out),
-            Stmt::Continue(c) => self.lower_stmt_continue(c, out),
-            Stmt::DoWhile(dw) => self.lower_stmt_do_while(dw, out),
-            Stmt::Throw(t) => self.lower_stmt_throw(t, out),
-            Stmt::Try(t) => self.lower_stmt_try(t, out),
-            Stmt::Switch(s) => self.lower_stmt_switch(s, out),
-            Stmt::Debugger(_) => {
+            Statement::ExpressionStatement(es) => self.lower_stmt_expr(es, out),
+            Statement::IfStatement(if_s) => self.lower_stmt_if(if_s, out),
+            Statement::WhileStatement(w) => self.lower_stmt_while(w, out),
+            Statement::ForStatement(f) => self.lower_stmt_for(f, out),
+            Statement::ForOfStatement(f) => self.lower_stmt_for_of(f, out),
+            Statement::ForInStatement(f) => self.lower_stmt_for_in(f, out),
+            Statement::ReturnStatement(r) => self.lower_stmt_return(r, out),
+            Statement::BlockStatement(b) => self.lower_stmt_block(b, out),
+            Statement::EmptyStatement(e) => self.lower_stmt_empty(e, out),
+            Statement::BreakStatement(b) => self.lower_stmt_break(b, out),
+            Statement::ContinueStatement(c) => self.lower_stmt_continue(c, out),
+            Statement::DoWhileStatement(dw) => self.lower_stmt_do_while(dw, out),
+            Statement::ThrowStatement(t) => self.lower_stmt_throw(t, out),
+            Statement::TryStatement(t) => self.lower_stmt_try(t, out),
+            Statement::SwitchStatement(s) => self.lower_stmt_switch(s, out),
+            Statement::DebuggerStatement(_) => {
                 // Treated as a compile-time no-op (breakpoint in a standard JS runtime)
                 Ok(())
             }
-            Stmt::Labeled(l) => {
-                let label = l.label.sym.to_string();
+            Statement::LabeledStatement(l) => {
+                let label = l.label.name.to_string();
                 let mut body_stmts = Vec::new();
                 self.lower_stmt(&l.body, &mut body_stmts)?;
                 if !body_stmts.is_empty() {
@@ -82,15 +85,17 @@ impl LowerCtx {
                 }
                 Ok(())
             }
-            Stmt::With(w) => {
+            Statement::WithStatement(w) => {
                 self.lower_stmt(&w.body, out)
             }
+            // Module declarations (import/export) are handled by lower_module_decl
+            _ => Ok(()),
         }
     }
 
-    pub(crate) fn lower_stmt_to_vec(&mut self, stmt: &Stmt) -> CompileResult<Vec<HirStmt>> {
+    pub(crate) fn lower_stmt_to_vec(&mut self, stmt: &Statement) -> CompileResult<Vec<HirStmt>> {
         match stmt {
-            Stmt::Block(b) => {
+            Statement::BlockStatement(b) => {
                 self.push_scope();
                 let v = self.lower_block_stmts(b)?;
                 self.pop_scope();
@@ -104,9 +109,17 @@ impl LowerCtx {
         }
     }
 
-    pub(crate) fn lower_block_stmts(&mut self, block: &BlockStmt) -> CompileResult<Vec<HirStmt>> {
+    pub(crate) fn lower_block_stmts(&mut self, block: &BlockStatement) -> CompileResult<Vec<HirStmt>> {
         let mut out = Vec::new();
-        for s in &block.stmts {
+        for s in &block.body {
+            self.lower_stmt(s, &mut out)?;
+        }
+        Ok(out)
+    }
+
+    pub(crate) fn lower_function_body(&mut self, body: &FunctionBody) -> CompileResult<Vec<HirStmt>> {
+        let mut out = Vec::new();
+        for s in &body.statements {
             self.lower_stmt(s, &mut out)?;
         }
         Ok(out)

@@ -1,19 +1,26 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 
 use diagnostics::{CompileError, CompileResult};
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_expr_new(&mut self, n: &NewExpr) -> CompileResult<HirExpr> {
-        if let Expr::Ident(id) = &*n.callee {
+    pub(super) fn lower_expr_new(&mut self, n: &NewExpression) -> CompileResult<HirExpr> {
+        if let Expression::Identifier(id) = &n.callee {
             let mut args = Vec::new();
-            if let Some(nargs) = &n.args {
-                for arg in nargs {
-                    args.push(self.lower_expr(&arg.expr)?);
+            for arg in &n.arguments {
+                match arg {
+                    Argument::SpreadElement(spread) => {
+                        let e = self.lower_expr(&spread.argument)?;
+                        args.push(HirExpr::Spread(Box::new(e)));
+                    }
+                    other => {
+                        let expr = other.as_expression().unwrap();
+                        args.push(self.lower_expr(expr)?);
+                    }
                 }
             }
-            let raw_class_name = id.sym.to_string();
+            let raw_class_name = id.name.to_string();
             let class_name = self.class_aliases.get(&raw_class_name)
                 .cloned()
                 .unwrap_or(raw_class_name);

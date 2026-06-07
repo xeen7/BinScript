@@ -1,35 +1,24 @@
-use swc_core::ecma::ast::*;
+use oxc::ast::ast::*;
 use diagnostics::CompileResult;
 use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_expr_class(&mut self, ce: &ClassExpr) -> CompileResult<HirExpr> {
-        let name = ce.ident.as_ref()
-            .map(|id| id.sym.to_string())
+    pub(super) fn lower_expr_class(&mut self, ce: &Class) -> CompileResult<HirExpr> {
+        let name = ce.id.as_ref()
+            .map(|id| id.name.to_string())
             .unwrap_or_else(|| format!("_AnonClass_{}", self.fresh_func_id()));
         self.lower_expr_class_with_name(ce, name)
     }
 
-    pub(crate) fn lower_expr_class_with_name(&mut self, ce: &ClassExpr, class_name: String) -> CompileResult<HirExpr> {
+    pub(crate) fn lower_expr_class_with_name(&mut self, ce: &Class, class_name: String) -> CompileResult<HirExpr> {
         let func_id = self.fresh_func_id();
         self.function_stack.push(func_id);
         self.push_scope();
 
         let mut body = Vec::new();
         
-        let dummy_ident = Ident::new(
-            class_name.clone().into(),
-            swc_core::common::DUMMY_SP,
-            swc_core::common::SyntaxContext::empty(),
-        );
-        let class_decl = ClassDecl {
-            ident: dummy_ident,
-            declare: false,
-            class: ce.class.clone(),
-        };
-
-        self.lower_decl(&Decl::Class(class_decl), &mut body)?;
+        self.lower_class_decl(ce, Some(class_name.clone()), &mut body)?;
 
         let binding = self.lookup(&class_name).unwrap();
 
