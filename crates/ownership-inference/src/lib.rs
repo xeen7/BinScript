@@ -146,7 +146,7 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                             new_instrs.push(MirInstr::DropStack(reg));
                         }
                         classify::MemoryClass::Shared | classify::MemoryClass::Owned => {
-                            new_instrs.push(MirInstr::RcDec(reg)); println!("Emitting RcDec for {}", reg);
+                            new_instrs.push(MirInstr::RcDec(reg)); tracing::debug!("Emitting RcDec for {}", reg);
                         }
                     }
                 }
@@ -161,19 +161,19 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                     if let MirInstr::StoreProp(_, _, MirOperand::Reg(val_reg), ref mut is_moved) = &mut instr {
                         if regs_to_drop.contains(val_reg) {
                             *is_moved = true;
-                            transferred_regs.push(*val_reg); println!("Moved and transferred: {}", val_reg);
+                            transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
                         }
                     } else if let MirInstr::StoreSharedField(_, _, MirOperand::Reg(val_reg), ref mut is_moved) = &mut instr {
                         if regs_to_drop.contains(val_reg) {
                             *is_moved = true;
-                            transferred_regs.push(*val_reg); println!("Moved and transferred: {}", val_reg);
+                            transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
                         }
                     } else if let MirInstr::Move(_, src) = &mut instr {
                         if let MirOperand::Reg(val_reg) = src {
                             if regs_to_drop.contains(val_reg) {
                                 match classes.get_class(*val_reg) {
                                     classify::MemoryClass::Owned => {
-                                        transferred_regs.push(*val_reg); println!("Moved and transferred: {}", val_reg);
+                                        transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
                                     }
                                     _ => {}
                                 }
@@ -342,11 +342,11 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                                 if deferred_regs.contains(&reg) || used_reg == Some(reg) {
                                     new_instrs.push(MirInstr::RcDecDeferred(reg));
                                 } else {
-                                    new_instrs.push(MirInstr::RcDec(reg)); println!("Emitting RcDec for {}", reg);
+                                    new_instrs.push(MirInstr::RcDec(reg)); tracing::debug!("Emitting RcDec for {}", reg);
                                 }
                             }
                             classify::MemoryClass::Owned => {
-                                new_instrs.push(MirInstr::Drop(reg)); println!("Emitting Drop for {}", reg);
+                                new_instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
                             }
                         }
                     }

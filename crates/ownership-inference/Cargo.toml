@@ -7,3 +7,4 @@ edition = "2021"
 hir = { version = "0.1.0", path = "../hir" }
 mir = { path = "../mir" }
 petgraph = { workspace = true }
+tracing.workspace = true
