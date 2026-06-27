@@ -17,6 +17,10 @@ for arg in "$@"; do
     fi
 done
 
+if [ "$OPTIMIZE" -eq 0 ]; then
+    EXTRA_FLAGS="$EXTRA_FLAGS --opt-level 0"
+fi
+
 # Ensure a test file was provided
 if [ -z "$TEST_FILE" ]; then
     echo "Usage: ./run_test.sh [options] <path/to/test.ts>"
