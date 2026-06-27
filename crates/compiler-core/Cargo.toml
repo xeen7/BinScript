@@ -13,6 +13,7 @@ parser = { path = "../parser" }
 hir = { path = "../hir" }
 mir = { path = "../mir" }
 codegen-llvm = { path = "../codegen-llvm" }
+ownership-inference = { path = "../ownership-inference" }
 module-graph = { path = "../module-graph" }
 incremental = { path = "../incremental" }
 oxc.workspace = true
@@ -22,3 +23,4 @@ tracing.workspace = true
 tracing-subscriber.workspace = true
 miette.workspace = true
 rayon.workspace = true
+ts-rt-stubs = { path = "../../rt-stubs" }

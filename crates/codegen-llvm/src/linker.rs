@@ -56,12 +56,17 @@ pub fn link_to_binary(
 
     let mut rt_stubs_path = None;
 
-    // 1. Try to find relative to workspace root (CWD)
+    let build_profile = match opt_level {
+        OptimizationLevel::None => "debug",
+        _ => "release",
+    };
+
+    // 1. Try to find relative to workspace root (CWD), preferring the target profile
     let cwd_paths = [
-        Path::new("target/release/libts_rt_stubs.a"),
-        Path::new("lib/libts_rt_stubs.a"),
-        Path::new("target/debug/libts_rt_stubs.a"),
+        PathBuf::from("target").join(build_profile).join("libts_rt_stubs.a"),
+        PathBuf::from("lib").join("libts_rt_stubs.a"),
     ];
+
     for path in &cwd_paths {
         if path.exists() {
             rt_stubs_path = Some(path.to_path_buf());
@@ -71,19 +76,15 @@ pub fn link_to_binary(
 
     // 2. If not found, try to locate relative to the current compiler executable
     if rt_stubs_path.is_none() {
-        if let Ok(exe_path) = std::env::current_exe() {
-            if let Some(exe_dir) = exe_path.parent() {
-                if let Some(target_dir) = exe_dir.parent() {
-                    let release_candidate = target_dir.join("release").join("libts_rt_stubs.a");
-                    if release_candidate.exists() {
-                        rt_stubs_path = Some(release_candidate);
-                    }
-                }
-                if rt_stubs_path.is_none() {
-                    let candidate = exe_dir.join("libts_rt_stubs.a");
-                    if candidate.exists() {
-                        rt_stubs_path = Some(candidate);
-                    }
+        let exe_candidates = [
+            std::env::current_exe().ok().and_then(|p| p.parent().and_then(|p| p.parent().map(|p| p.join(build_profile).join("libts_rt_stubs.a")))),
+            std::env::current_exe().ok().and_then(|p| p.parent().map(|p| p.join("libts_rt_stubs.a"))),
+        ];
+        for candidate_opt in &exe_candidates {
+            if let Some(candidate) = candidate_opt {
+                if candidate.exists() {
+                    rt_stubs_path = Some(candidate.to_path_buf());
+                    break;
                 }
             }
         }
@@ -92,7 +93,9 @@ pub fn link_to_binary(
     let mut cmd = Command::new(&cc);
     cmd.arg(&obj_path);
     if let Some(ref path) = rt_stubs_path {
+        cmd.arg("-Wl,--whole-archive");
         cmd.arg(path);
+        cmd.arg("-Wl,--no-whole-archive");
     } else {
         // Fallback checks just in case
         let target_release = Path::new("target/release/libts_rt_stubs.a");
@@ -109,12 +112,17 @@ pub fn link_to_binary(
     let status = cmd
         .arg("-o")
         .arg(output)
+        .arg("-u")
+        .arg("__bs_personality_v0")
+        .arg("-u")
+        .arg("__bs_rc_flush")
+        .arg("-lstdc++") // personality function and C++ runtime
+        .arg("-lgcc_s")  // dynamic unwinder (provides _Unwind_RaiseException)
         .arg("-lm") // link libm for math functions
         .arg("-no-pie")
-        .arg("-s")                  // Strip symbols
         .arg("-Wl,--gc-sections")   // Garbage collect unused sections
+        .arg("-g")                  // Include debug symbols
         .arg("-O3")                 // Optimize linked binary
-        .arg("-flto")               // Enable Link Time Optimization
         .status()
         .map_err(|e| CompileError::Link {
             message: format!("Failed to run linker `{}`: {}", cc, e),
