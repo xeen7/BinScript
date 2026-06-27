@@ -83,7 +83,8 @@ pub unsafe extern "C-unwind" fn circ_inc(header: *mut CircHeader) {
     }
     let obj_ptr = (header as *mut u8).add(CircHeader::SIZE);
     let global_val = (*header).global_rc.load(Ordering::Relaxed);
-    // eprintln!("circ_inc: {:?} (local_rc before: {}, global_rc: {})", obj_ptr, (*header).local_rc, global_val);
+    #[cfg(feature = "debug_rc")]
+    eprintln!("circ_inc: {:?} (local_rc before: {}, global_rc: {})", obj_ptr, (*header).local_rc, global_val);
     let cur_tid = current_thread_id();
     let owner = (*header).owner_tid.load(Ordering::Relaxed);
 
@@ -104,6 +105,9 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
     let header = &*header_ptr;
     let obj_ptr = (header_ptr as *mut u8).add(CircHeader::SIZE);
     let global_val = (*header).global_rc.load(Ordering::Relaxed);
+    #[cfg(feature = "debug_rc")]
+    eprintln!("circ_dec: {:?} (local_rc before: {}, global_rc: {})", obj_ptr, header.local_rc, global_val);
+
     
     let tid = current_thread_id();
     let owner = header.owner_tid.load(Ordering::Relaxed);

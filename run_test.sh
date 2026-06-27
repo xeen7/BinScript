@@ -3,6 +3,7 @@
 TEST_FILE=""
 EXTRA_FLAGS=""
 OPTIMIZE=0
+DEBUG_RC=0
 
 for arg in "$@"; do
     if [[ "$arg" == "--optimize" ]]; then
@@ -10,6 +11,10 @@ for arg in "$@"; do
         EXTRA_FLAGS="$EXTRA_FLAGS --opt-level 3"
     elif [[ "$arg" == "--trace-ownership" ]]; then
         export RUST_LOG="ownership_inference=debug"
+    elif [[ "$arg" == "--debug" ]]; then
+        export RUST_LOG="debug"
+        EXTRA_FLAGS="$EXTRA_FLAGS --verify-memory"
+        DEBUG_RC=1
     elif [[ "$arg" == -* ]]; then
         EXTRA_FLAGS="$EXTRA_FLAGS $arg"
     else
@@ -24,8 +29,8 @@ fi
 # Ensure a test file was provided
 if [ -z "$TEST_FILE" ]; then
     echo "Usage: ./run_test.sh [options] <path/to/test.ts>"
-    echo "Options: --verify-memory, --optimize, --trace-ownership"
-    echo "Example: ./run_test.sh --optimize --trace-ownership tests/closure_basic.ts"
+    echo "Options: --verify-memory, --optimize, --trace-ownership, --debug"
+    echo "Example: ./run_test.sh --debug tests/closure_basic.ts"
     exit 1
 fi
 
@@ -36,12 +41,18 @@ OUT_DIR="build"
 mkdir -p "$OUT_DIR"
 OUT_PATH="$OUT_DIR/$BASE_NAME"
 
+if [ "$DEBUG_RC" == "1" ]; then
+    RT_STUBS_FEATURES="--features debug_rc"
+else
+    RT_STUBS_FEATURES=""
+fi
+
 if [ "$OPTIMIZE" -eq 1 ]; then
     echo "Building ts-rt-stubs in RELEASE mode..."
-    cargo build -p ts-rt-stubs --release
+    cargo build -p ts-rt-stubs --release $RT_STUBS_FEATURES
 else
     echo "Building ts-rt-stubs in DEBUG mode..."
-    cargo build -p ts-rt-stubs
+    cargo build -p ts-rt-stubs $RT_STUBS_FEATURES
 fi
 
 echo "Compiling $TEST_FILE to $OUT_PATH..."
