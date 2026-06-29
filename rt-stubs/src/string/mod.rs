@@ -1,6 +1,5 @@
 //! String runtime methods for BinScript.
 
-use crate::gc;
 
 const TAG_STRING: u64 = 0xFFF7_0000_0000_0000;
 const TAG_MASK: u64 = 0xFFFF_0000_0000_0000;
@@ -8,23 +7,23 @@ const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
 
 /// Get the length of a tagged string.
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_length(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_length(val: u64) -> u64 {
     let tag = val & TAG_MASK;
     if tag != TAG_STRING {
-        return gc::box_number(0.0);
+        return crate::circ::box_number(0.0);
     }
     let payload = val & PAYLOAD_MASK;
     if payload == 0 {
-        return gc::box_number(0.0);
+        return crate::circ::box_number(0.0);
     }
     let c_str = std::ffi::CStr::from_ptr(payload as *const libc::c_char);
     let len = c_str.to_bytes().len();
-    gc::box_number(len as f64)
+    crate::circ::box_number(len as f64)
 }
 
 /// `str.charAt(index)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_charAt(str_tagged: u64, index_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_charAt(str_tagged: u64, index_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let idx = f64::from_bits(index_tagged) as i64;
     if idx < 0 || idx >= s.len() as i64 {
@@ -36,19 +35,19 @@ pub unsafe extern "C" fn __bs_string_charAt(str_tagged: u64, index_tagged: u64) 
 
 /// `str.charCodeAt(index)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_charCodeAt(str_tagged: u64, index_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_charCodeAt(str_tagged: u64, index_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let idx = f64::from_bits(index_tagged) as i64;
     if idx < 0 || idx >= s.len() as i64 {
-        return gc::box_number(f64::NAN);
+        return crate::circ::box_number(f64::NAN);
     }
     let code = s.as_bytes()[idx as usize] as f64;
-    gc::box_number(code)
+    crate::circ::box_number(code)
 }
 
 /// `str.startsWith(prefix)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_startsWith(str_tagged: u64, prefix_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_startsWith(str_tagged: u64, prefix_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let prefix = crate::get_c_string_from_tagged(prefix_tagged);
     if s.starts_with(prefix) {
@@ -60,7 +59,7 @@ pub unsafe extern "C" fn __bs_string_startsWith(str_tagged: u64, prefix_tagged: 
 
 /// `str.endsWith(suffix)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_endsWith(str_tagged: u64, suffix_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_endsWith(str_tagged: u64, suffix_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let suffix = crate::get_c_string_from_tagged(suffix_tagged);
     if s.ends_with(suffix) {
@@ -72,7 +71,7 @@ pub unsafe extern "C" fn __bs_string_endsWith(str_tagged: u64, suffix_tagged: u6
 
 /// `str.substring(start, end)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_substring(str_tagged: u64, start_tagged: u64, end_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_substring(str_tagged: u64, start_tagged: u64, end_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let len = s.len() as i64;
     
@@ -102,7 +101,7 @@ pub unsafe extern "C" fn __bs_string_substring(str_tagged: u64, start_tagged: u6
 
 /// `str.split(sep)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_split(str_tagged: u64, sep_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_split(str_tagged: u64, sep_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let sep = crate::get_c_string_from_tagged(sep_tagged);
     
@@ -117,28 +116,28 @@ pub unsafe extern "C" fn __bs_string_split(str_tagged: u64, sep_tagged: u64) -> 
 
 /// `str.trim()`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_trim(str_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_trim(str_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     crate::create_tagged_string(s.trim())
 }
 
 /// `str.toUpperCase()`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_toUpperCase(str_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_toUpperCase(str_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     crate::create_tagged_string(&s.to_uppercase())
 }
 
 /// `str.toLowerCase()`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_toLowerCase(str_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_toLowerCase(str_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     crate::create_tagged_string(&s.to_lowercase())
 }
 
 /// `str.replace(pattern, replacement)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_replace(str_tagged: u64, pattern_tagged: u64, replacement_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_replace(str_tagged: u64, pattern_tagged: u64, replacement_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let pattern = crate::get_c_string_from_tagged(pattern_tagged);
     let replacement = crate::get_c_string_from_tagged(replacement_tagged);
@@ -147,7 +146,7 @@ pub unsafe extern "C" fn __bs_string_replace(str_tagged: u64, pattern_tagged: u6
 
 /// `str.repeat(count)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_repeat(str_tagged: u64, count_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_repeat(str_tagged: u64, count_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let count = f64::from_bits(count_tagged) as usize;
     crate::create_tagged_string(&s.repeat(count))
@@ -155,7 +154,7 @@ pub unsafe extern "C" fn __bs_string_repeat(str_tagged: u64, count_tagged: u64) 
 
 /// `str.padStart(targetLength, padString)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_padStart(str_tagged: u64, target_len_tagged: u64, pad_str_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_padStart(str_tagged: u64, target_len_tagged: u64, pad_str_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let target_len = f64::from_bits(target_len_tagged) as usize;
     if s.len() >= target_len {
@@ -177,7 +176,7 @@ pub unsafe extern "C" fn __bs_string_padStart(str_tagged: u64, target_len_tagged
 
 /// `str.padEnd(targetLength, padString)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_padEnd(str_tagged: u64, target_len_tagged: u64, pad_str_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_padEnd(str_tagged: u64, target_len_tagged: u64, pad_str_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let target_len = f64::from_bits(target_len_tagged) as usize;
     if s.len() >= target_len {
@@ -199,7 +198,7 @@ pub unsafe extern "C" fn __bs_string_padEnd(str_tagged: u64, target_len_tagged: 
 
 /// `str.includes(searchString)`
 #[no_mangle]
-pub unsafe extern "C" fn __bs_string_includes(str_tagged: u64, search_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_string_includes(str_tagged: u64, search_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     let search = crate::get_c_string_from_tagged(search_tagged);
     if s.contains(search) {

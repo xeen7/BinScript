@@ -14,8 +14,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
     #[allow(unused_variables)]
     pub(in crate::codegen::instr) fn emit_instr_store_prop(&mut self, instr: &MirInstr) -> CompileResult<()> {
         match instr {
-            MirInstr::StoreProp(obj_reg, prop_name, val_operand) => {
-                let prop_set_fn = self.module.get_function("__bs_prop_set").unwrap();
+            MirInstr::StoreProp(obj_reg, prop_name, val_operand, is_moved) => {
+                let fn_name = if *is_moved { "__bs_prop_set_moved" } else { "__bs_prop_set" };
+                let prop_set_fn = self.module.get_function(fn_name).unwrap();
     let obj_val = self.val(&MirOperand::Reg(*obj_reg))?;
     let global_str = self.builder.build_global_string_ptr(prop_name, "prop_str").unwrap();
     let prop_ptr = global_str.as_pointer_value();

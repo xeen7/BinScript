@@ -5,8 +5,9 @@ use crate::types::*;
 use crate::lower::LowerCtx;
 
 impl LowerCtx {
-    pub(super) fn lower_expr_this(&self, _this: &ThisExpression) -> CompileResult<HirExpr> {
+    pub(super) fn lower_expr_this(&mut self, _this: &ThisExpression) -> CompileResult<HirExpr> {
         if let Some(this_id) = self.this_binding {
+            self.record_lookup(this_id);
             Ok(HirExpr::Var(this_id))
         } else {
             Err(CompileError::Lowering {

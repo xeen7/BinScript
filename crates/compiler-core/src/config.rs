@@ -12,4 +12,6 @@ pub struct CompileConfig {
     pub opt_level: u8,
     /// If true, disable incremental caching.
     pub no_cache: bool,
+    /// If true, enable strict concurrency/memory verification tracking.
+    pub verify_memory: bool,
 }

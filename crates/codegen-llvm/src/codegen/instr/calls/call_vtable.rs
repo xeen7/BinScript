@@ -21,7 +21,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     let vtable_ptr = self.builder.build_load(self.ptr_ty, obj_ptr, "vtable_ptr").unwrap().into_pointer_value();
 
-    let method_offset = self.i32_ty.const_int((5 + method_index) as u64, false);
+    let method_offset = self.i32_ty.const_int((7 + method_index) as u64, false);
     let method_fn_ptr_ptr = unsafe {
         self.builder.build_gep(self.ptr_ty, vtable_ptr, &[method_offset], "method_fn_ptr_ptr").unwrap()
     };
@@ -37,12 +37,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         .iter()
         .map(|a| self.val(a).map(|v| v.into()))
         .collect::<CompileResult<_>>()?;
-    let rv = self.builder.build_indirect_call(fn_ty, method_fn_ptr, &av, "vcall").unwrap();
-    let v = rv
-        .try_as_basic_value()
-        .basic()
-        .map(|bv| bv.into_int_value())
-        .unwrap_or_else(|| self.nan.const_undefined());
+                let rv = self.emit_indirect_call_with_invoke(fn_ty, method_fn_ptr, &av, "vtable_call").unwrap();
+                let v = rv
+                    .try_as_basic_value()
+                    .basic()
+                    .map(|bv| bv.into_int_value())
+                    .unwrap_or_else(|| self.nan.const_undefined());
     self.store(*dest, v);
             }
 

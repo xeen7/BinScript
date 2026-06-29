@@ -4,7 +4,7 @@ use crate::types::coercion::{__bs_String, __bs_Number};
 use crate::objects::dynamic_props::{get_dynamic_property, delete_dynamic_property};
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_strict_eq(l: u64, r: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_strict_eq(l: u64, r: u64) -> u64 {
     const TAG_STRING: u64 = 0xFFF7_0000_0000_0000;
     const TAG_MIN: u64 = 0xFFF1;
     const TAG_TRUE: u64 = 0xFFF4_0000_0000_0000;
@@ -51,7 +51,7 @@ pub unsafe extern "C" fn __bs_strict_eq(l: u64, r: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_strict_ne(l: u64, r: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_strict_ne(l: u64, r: u64) -> u64 {
     const TAG_TRUE: u64 = 0xFFF4_0000_0000_0000;
     const TAG_FALSE: u64 = 0xFFF3_0000_0000_0000;
     if __bs_strict_eq(l, r) == TAG_TRUE {
@@ -64,7 +64,7 @@ pub unsafe extern "C" fn __bs_strict_ne(l: u64, r: u64) -> u64 {
 /// JS `+` operator: numeric addition when both sides are numbers,
 /// string concatenation when either side is a string (or coerces to one).
 #[no_mangle]
-pub unsafe extern "C" fn __bs_add(l: u64, r: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_add(l: u64, r: u64) -> u64 {
     const TAG_STRING: u64 = 0xFFF7_0000_0000_0000;
     const TAG_MIN: u64    = 0xFFF1;
 
@@ -98,7 +98,7 @@ pub unsafe extern "C" fn __bs_add(l: u64, r: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_is_nullish(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_is_nullish(val: u64) -> u64 {
     const TAG_TRUE: u64 = 0xFFF4_0000_0000_0000;
     const TAG_FALSE: u64 = 0xFFF3_0000_0000_0000;
     let tag = val & 0xFFFF_0000_0000_0000;
@@ -110,14 +110,14 @@ pub unsafe extern "C" fn __bs_is_nullish(val: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_exp(l: u64, r: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_exp(l: u64, r: u64) -> u64 {
     let lf = f64::from_bits(__bs_Number(l));
     let rf = f64::from_bits(__bs_Number(r));
     lf.powf(rf).to_bits()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_in(key: u64, obj: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_in(key: u64, obj: u64) -> u64 {
     const TAG_TRUE: u64 = 0xFFF4_0000_0000_0000;
     const TAG_FALSE: u64 = 0xFFF3_0000_0000_0000;
     
@@ -150,7 +150,7 @@ pub unsafe extern "C" fn __bs_in(key: u64, obj: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_delete_prop(obj: u64, key: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_delete_prop(obj: u64, key: u64) -> u64 {
     const TAG_TRUE: u64 = 0xFFF4_0000_0000_0000;
     
     let key_str_tagged = __bs_String(key);

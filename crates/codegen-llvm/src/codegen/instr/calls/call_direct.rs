@@ -26,7 +26,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     if expected_params == av.len() + 1 {
         av.insert(0, self.nan.const_undefined().into());
     }
-    let rv = self.builder.build_call(fn_val, &av, "call").unwrap();
+    let rv = self.emit_call_with_invoke(fn_val, &av, "call").unwrap();
     let v = rv
         .try_as_basic_value()
         .basic()

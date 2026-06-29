@@ -1,4 +1,3 @@
-use crate::gc;
 use crate::core::vtable::DATE_VTABLE;
 use crate::core::alloc::__bs_alloc;
 use crate::types::string_utils::get_c_string_from_tagged;
@@ -53,7 +52,7 @@ fn parse_date_string(s: &str) -> f64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Date_new(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Date_new(val: u64) -> u64 {
     if (val & 0xFFFF_0000_0000_0000) == 0xFFF1_0000_0000_0000 {
         __bs_Date_new_0()
     } else {
@@ -62,18 +61,18 @@ pub unsafe extern "C" fn __bs_Date_new(val: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Date_new_0() -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Date_new_0() -> u64 {
     let now = std::time::SystemTime::now();
     let since_the_epoch = now.duration_since(std::time::UNIX_EPOCH).expect("Time went backwards");
     let ms = since_the_epoch.as_millis() as f64;
-    let obj = __bs_alloc(&DATE_VTABLE, 8);
+    let obj = __bs_alloc(&DATE_VTABLE, 16);
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
-    set_dynamic_property(payload as *mut u8, "[[PrimitiveValue]]".to_string(), gc::box_number(ms));
+    set_dynamic_property(payload as *mut u8, "[[PrimitiveValue]]".to_string(), crate::circ::box_number(ms));
     obj
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Date_new_1(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Date_new_1(val: u64) -> u64 {
     let ms = if (val & 0xFFFF_0000_0000_0000) == 0xFFF1_0000_0000_0000 {
         f64::NAN
     } else if (val & 0xFFFF_0000_0000_0000) == 0xFFF2_0000_0000_0000 {
@@ -87,14 +86,14 @@ pub unsafe extern "C" fn __bs_Date_new_1(val: u64) -> u64 {
             f64::from_bits(val)
         }
     };
-    let obj = __bs_alloc(&DATE_VTABLE, 8);
+    let obj = __bs_alloc(&DATE_VTABLE, 16);
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
-    set_dynamic_property(payload as *mut u8, "[[PrimitiveValue]]".to_string(), gc::box_number(ms));
+    set_dynamic_property(payload as *mut u8, "[[PrimitiveValue]]".to_string(), crate::circ::box_number(ms));
     obj
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Date_new_n(
+pub unsafe extern "C-unwind" fn __bs_Date_new_n(
     y_tagged: u64,
     m_tagged: u64,
     d_tagged: u64,
@@ -138,15 +137,15 @@ pub unsafe extern "C" fn __bs_Date_new_n(
     epoch_ms += (s as f64) * 1000.0;
     epoch_ms += ms_val;
 
-    let obj = __bs_alloc(&DATE_VTABLE, 8);
+    let obj = __bs_alloc(&DATE_VTABLE, 16);
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
-    set_dynamic_property(payload as *mut u8, "[[PrimitiveValue]]".to_string(), gc::box_number(epoch_ms));
+    set_dynamic_property(payload as *mut u8, "[[PrimitiveValue]]".to_string(), crate::circ::box_number(epoch_ms));
     obj
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_now() -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_now() -> u64 {
     let now = std::time::SystemTime::now();
     let since_the_epoch = now.duration_since(std::time::UNIX_EPOCH).expect("Time went backwards");
-    gc::box_number(since_the_epoch.as_millis() as f64)
+    crate::circ::box_number(since_the_epoch.as_millis() as f64)
 }

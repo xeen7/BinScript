@@ -1,6 +1,5 @@
 //! Math and Global helper function implementations for BinScript.
 
-use crate::gc;
 
 
 // Simple, self-contained LCG RNG
@@ -14,77 +13,77 @@ unsafe fn next_random() -> f64 {
 // --- Math Functions ---
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_floor(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).floor())
+pub unsafe extern "C-unwind" fn __bs_math_floor(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).floor())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_ceil(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).ceil())
+pub unsafe extern "C-unwind" fn __bs_math_ceil(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).ceil())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_round(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).round())
+pub unsafe extern "C-unwind" fn __bs_math_round(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).round())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_abs(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).abs())
+pub unsafe extern "C-unwind" fn __bs_math_abs(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).abs())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_sqrt(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).sqrt())
+pub unsafe extern "C-unwind" fn __bs_math_sqrt(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).sqrt())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_pow(x: u64, y: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).powf(f64::from_bits(y)))
+pub unsafe extern "C-unwind" fn __bs_math_pow(x: u64, y: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).powf(f64::from_bits(y)))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_min(x: u64, y: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).min(f64::from_bits(y)))
+pub unsafe extern "C-unwind" fn __bs_math_min(x: u64, y: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).min(f64::from_bits(y)))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_max(x: u64, y: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).max(f64::from_bits(y)))
+pub unsafe extern "C-unwind" fn __bs_math_max(x: u64, y: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).max(f64::from_bits(y)))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_log(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).ln())
+pub unsafe extern "C-unwind" fn __bs_math_log(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).ln())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_log2(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).log2())
+pub unsafe extern "C-unwind" fn __bs_math_log2(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).log2())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_sin(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).sin())
+pub unsafe extern "C-unwind" fn __bs_math_sin(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).sin())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_cos(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).cos())
+pub unsafe extern "C-unwind" fn __bs_math_cos(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).cos())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_tan(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).tan())
+pub unsafe extern "C-unwind" fn __bs_math_tan(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).tan())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_random() -> u64 {
-    gc::box_number(next_random())
+pub unsafe extern "C-unwind" fn __bs_math_random() -> u64 {
+    crate::circ::box_number(next_random())
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_math_trunc(x: u64) -> u64 {
-    gc::box_number(f64::from_bits(x).trunc())
+pub unsafe extern "C-unwind" fn __bs_math_trunc(x: u64) -> u64 {
+    crate::circ::box_number(f64::from_bits(x).trunc())
 }
 

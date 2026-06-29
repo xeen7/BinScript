@@ -21,7 +21,7 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
     classes.insert("CaptureCell".to_string(), hir::HirClass {
         name: "CaptureCell".to_string(),
         super_name: None,
-        fields: vec!["value".to_string()],
+        fields: vec![("value".to_string(), hir::HirType::Any)],
         methods: Vec::new(),
         getters: Vec::new(),
         setters: Vec::new(),
@@ -141,8 +141,8 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
         if let Some(env) = env_reg {
             for (i, &bid) in f.captures.iter().enumerate() {
                 let loaded_reg = ctx.fresh_reg();
-                // index 1 + i because index 0 is the function pointer
-                ctx.emit(MirInstr::LoadField(loaded_reg, env, 1 + i as u32));
+                // index is `i + 1` because LoadField adds 2, giving 3 + i (skips fn_ptr, drop_ptr, and trace_ptr)
+                ctx.emit(MirInstr::LoadField(loaded_reg, env, (i + 1) as u32));
                 ctx.bind(bid, loaded_reg);
                 if ctx.capture_cells.contains(&bid) {
                     ctx.reg_shapes.insert(loaded_reg, "CaptureCell".to_string());
@@ -193,12 +193,13 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
         func_id_to_name.insert(f.id, mir_name);
     }
 
-    Ok(MirModule {
+    let module = MirModule {
         functions,
         main_body,
         classes: classes.clone(),
         func_id_to_name,
-    })
+    };
+    Ok(module)
 }
 
 // ===========================================================================
@@ -233,6 +234,8 @@ struct LowerCtx<'a> {
     global_fn_bindings: HashMap<String, hir::BindingId>,
     global_fn_captures: HashMap<String, Vec<hir::BindingId>>,
     is_async_generator: bool,
+    next_scope_id: u32,
+    active_exception_scopes: Vec<(u32, BlockId)>,
 }
 
 impl<'a> LowerCtx<'a> {
@@ -249,7 +252,7 @@ impl<'a> LowerCtx<'a> {
         Self {
             next_reg: 0,
             next_block: 1,
-            blocks: vec![BasicBlock { id: 0, instrs: Vec::new() }],
+            blocks: vec![BasicBlock { id: 0, exception_scopes: Vec::new(), instrs: Vec::new() }],
             current: 0,
             bindings: HashMap::new(),
             func_names,
@@ -266,13 +269,21 @@ impl<'a> LowerCtx<'a> {
             global_fn_bindings,
             global_fn_captures,
             is_async_generator,
+            next_scope_id: 1,
+            active_exception_scopes: Vec::new(),
         }
     }
 
-    fn fresh_reg(&mut self) -> MirReg {
+    pub fn fresh_reg(&mut self) -> MirReg {
         let r = self.next_reg;
         self.next_reg += 1;
         r
+    }
+
+    pub fn next_scope_id(&mut self) -> u32 {
+        let id = self.next_scope_id;
+        self.next_scope_id += 1;
+        id
     }
 
     fn has_getter(&self, class_name: &str, property: &str) -> bool {
@@ -324,7 +335,7 @@ impl<'a> LowerCtx<'a> {
     fn fresh_block(&mut self) -> BlockId {
         let id = self.next_block;
         self.next_block += 1;
-        self.blocks.push(BasicBlock { id, instrs: Vec::new() });
+        self.blocks.push(BasicBlock { id, exception_scopes: self.active_exception_scopes.clone(), instrs: Vec::new() });
         id
     }
 
@@ -383,7 +394,7 @@ impl<'a> LowerCtx<'a> {
             if let Some(ref super_name) = class.super_name {
                 fields.extend(self.get_all_fields(super_name));
             }
-            fields.extend(class.fields.clone());
+            fields.extend(class.fields.iter().map(|(name, _)| name.clone()));
         }
         fields
     }

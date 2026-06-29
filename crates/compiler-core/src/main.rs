@@ -29,6 +29,10 @@ struct Cli {
     /// Disable incremental compilation cache.
     #[arg(long)]
     no_cache: bool,
+
+    /// Enable strict memory verification (UAF tracking).
+    #[arg(long)]
+    verify_memory: bool,
 }
 
 fn main() {
@@ -47,6 +51,7 @@ fn main() {
         emit_llvm_ir: cli.emit_llvm_ir,
         opt_level: cli.opt_level.min(3),
         no_cache: cli.no_cache,
+        verify_memory: cli.verify_memory,
     };
 
     if let Err(e) = pipeline::run(&cfg) {

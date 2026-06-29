@@ -1,11 +1,10 @@
-use crate::gc;
 const TAG_MASK: u64 = 0xFFFF_0000_0000_0000;
 const TAG_STRING: u64 = 0xFFF7_0000_0000_0000;
 
 // --- Global Functions ---
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_parseInt(s_tagged: u64, radix_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_parseInt(s_tagged: u64, radix_tagged: u64) -> u64 {
     if radix_tagged == 0xFFF1_0000_0000_0000 {
         __bs_parseInt_1(s_tagged)
     } else {
@@ -14,7 +13,7 @@ pub unsafe extern "C" fn __bs_parseInt(s_tagged: u64, radix_tagged: u64) -> u64 
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_parseInt_1(s_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_parseInt_1(s_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(s_tagged);
     let trimmed = s.trim_start();
     
@@ -37,14 +36,14 @@ pub unsafe extern "C" fn __bs_parseInt_1(s_tagged: u64) -> u64 {
     
     let prefix = &trimmed[..end];
     if let Ok(val) = i64::from_str_radix(prefix, 10) {
-        gc::box_number(val as f64)
+        crate::circ::box_number(val as f64)
     } else {
         std::f64::NAN.to_bits()
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_parseInt_2(s_tagged: u64, radix_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_parseInt_2(s_tagged: u64, radix_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(s_tagged);
     let radix = f64::from_bits(radix_tagged) as u32;
     if radix < 2 || radix > 36 {
@@ -71,14 +70,14 @@ pub unsafe extern "C" fn __bs_parseInt_2(s_tagged: u64, radix_tagged: u64) -> u6
     
     let prefix = &trimmed[..end];
     if let Ok(val) = i64::from_str_radix(prefix, radix) {
-        gc::box_number(val as f64)
+        crate::circ::box_number(val as f64)
     } else {
         std::f64::NAN.to_bits()
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_parseFloat(s_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_parseFloat(s_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(s_tagged);
     let trimmed = s.trim_start();
     
@@ -117,38 +116,38 @@ pub unsafe extern "C" fn __bs_parseFloat(s_tagged: u64) -> u64 {
     
     let prefix = &trimmed[..end];
     if let Ok(val) = prefix.parse::<f64>() {
-        gc::box_number(val)
+        crate::circ::box_number(val)
     } else {
         std::f64::NAN.to_bits()
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_isNaN(x: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_isNaN(x: u64) -> u64 {
     let tag = x & TAG_MASK;
     if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
         let f = f64::from_bits(x);
-        gc::box_boolean(f.is_nan())
+        crate::circ::box_boolean(f.is_nan())
     } else if tag == TAG_STRING {
         let s = crate::get_c_string_from_tagged(x);
         if s.trim().parse::<f64>().is_err() {
-            gc::box_boolean(true)
+            crate::circ::box_boolean(true)
         } else {
-            gc::box_boolean(false)
+            crate::circ::box_boolean(false)
         }
     } else {
-        gc::box_boolean(true)
+        crate::circ::box_boolean(true)
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_isFinite(x: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_isFinite(x: u64) -> u64 {
     let tag = x & TAG_MASK;
     if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
         let f = f64::from_bits(x);
-        gc::box_boolean(f.is_finite())
+        crate::circ::box_boolean(f.is_finite())
     } else {
-        gc::box_boolean(false)
+        crate::circ::box_boolean(false)
     }
 }
 

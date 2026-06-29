@@ -74,18 +74,69 @@ pub enum MirInstr {
     Return(Option<MirOperand>),
 
     // --- Stage 2 additions ---
-    /// Allocate an object with a given shape: `Alloc(dest, class_name)`
+    /// Allocate an object with a given shape (fallback): `Alloc(dest, class_name)`
     Alloc(MirReg, String),
+    /// Allocate an object with a given shape as Shared (RC=1): `AllocShared(dest, class_name)`
+    AllocShared(MirReg, String),
+    /// Allocate a strictly acyclic object with a given shape: `AllocAcyclic(dest, class_name)`
+    AllocAcyclic(MirReg, String),
+    /// Allocate a strictly acyclic object with a given shape as Shared: `AllocSharedAcyclic(dest, class_name)`
+    AllocSharedAcyclic(MirReg, String),
+    /// Allocate an object with a given shape as Owned (no RC): `AllocOwned(dest, class_name)`
+    AllocOwned(MirReg, String),
+    /// Allocate an object with a given shape on the Stack: `AllocStack(dest, class_name)`
+    AllocStack(MirReg, String),
+    
+    // --- Stage 4: Arena Layer ---
+    /// Create an arena for a region: `ArenaCreate(region_id, initial_capacity)`
+    ArenaCreate(u32, u64),
+    /// Allocate an object inside an arena: `AllocArena(dest, class_name, region_id)`
+    AllocArena(MirReg, String, u32),
+    /// Destroy an arena (free all memory in bulk): `ArenaDestroy(region_id)`
+    ArenaDestroy(u32),
+    /// Call drop_fn without freeing: `CallDropFnOnly(reg)`
+    CallDropFnOnly(MirReg),
+    
+    // --- Stage 5: RAII Scope Guards ---
+    /// Push a scope guard for deterministic resource release
+    ScopeGuardPush { scope_id: u32, reg: MirReg, release_fn: String },
+    /// Cancel a previously armed scope guard
+    ScopeGuardCancel { scope_id: u32, reg: MirReg },
+    /// Flush all scope guards down to (and including) the target scope
+    ScopeGuardFlushTo { current_scope: u32, target_scope: u32 },
+    
+    /// Increment reference count: `RcInc(reg)`
+    RcInc(MirReg),
+    /// Decrement reference count: `RcDec(reg)`
+    RcDec(MirReg),
+    /// Increment reference count (deferred via thread-local buffer): `RcIncDeferred(reg)`
+    RcIncDeferred(MirReg),
+    /// Decrement reference count (deferred via thread-local buffer): `RcDecDeferred(reg)`
+    RcDecDeferred(MirReg),
+    /// Flush all deferred reference count operations
+    FlushRcDelta,
+    /// Drop a value (call drop_fn and free memory): `Drop(reg)`
+    Drop(MirReg),
+    /// Drop a value on the stack (call drop_fn but do NOT free memory): `DropStack(reg)`
+    DropStack(MirReg),
+    
+    /// Non-owning reference: `Borrow(dest, src)`
+    Borrow(MirReg, MirReg),
+    /// Mutable non-owning reference: `BorrowMut(dest, src)`
+    BorrowMut(MirReg, MirReg),
+
     /// Load a field from an object at a static index: `LoadField(dest, obj_reg, index)`
     LoadField(MirReg, MirReg, u32),
     /// Store a value to a field of an object at a static index: `StoreField(obj_reg, index, val_operand)`
     StoreField(MirReg, u32, MirOperand),
+    /// Store a value to a field with RC awareness (RcDec old, RcInc new if not moved): `StoreSharedField(obj_reg, index, val_operand, is_moved)`
+    StoreSharedField(MirReg, u32, MirOperand, bool),
     /// Call a method via vtable: `CallVTable(dest, obj_reg, method_index, args)`
     CallVTable(MirReg, MirReg, u32, Vec<MirOperand>),
     /// Dynamic property read: `LoadProp(dest, obj_reg, property_name)`
     LoadProp(MirReg, MirReg, String),
-    /// Dynamic property write: `StoreProp(obj_reg, property_name, val_operand)`
-    StoreProp(MirReg, String, MirOperand),
+    /// Dynamic property write: `StoreProp(obj_reg, property_name, val_operand, is_moved)`
+    StoreProp(MirReg, String, MirOperand, bool),
     /// Dynamic property delete: `DeleteProp(dest, obj_reg, prop_operand)`
     DeleteProp(MirReg, MirOperand, MirOperand),
     // --- Stage 3 additions ---
@@ -100,14 +151,18 @@ pub enum MirInstr {
     /// Resume execution and load sent value: `Resume(dest, yield_index)`
     Resume(MirReg, u32),
     // --- Stage 12 additions ---
-    /// Try enter context: `TryEnter(jmp_buf_reg)`
-    TryEnter(MirReg),
-    /// Set longjmp return point: `SetJmp(dest_reg, jmp_buf_reg)`
-    SetJmp(MirReg, MirReg),
+    /// Try enter context: `TryEnter { scope_id, catch_target }`
+    TryEnter { scope_id: u32, catch_target: BlockId },
     /// Try exit context: `TryExit`
     TryExit,
     /// Throw a value: `Throw(val_operand)`
     Throw(MirOperand),
+    /// Re-throw an exception: `Rethrow(exn_reg)`
+    Rethrow(MirReg),
+    /// Landing pad for exception cleanup: `LandingPad { exn_reg, is_cleanup }`
+    LandingPad { exn_reg: MirReg, is_cleanup: bool },
+    /// Extract exception from landing pad: `ExtractException { dest, lp_reg }`
+    ExtractException { dest: MirReg, lp_reg: MirReg },
 
     // --- Class global variable support ---
     /// Load a value from a global variable: `LoadGlobal(dest, name)`
@@ -123,6 +178,7 @@ pub enum MirInstr {
 #[derive(Debug, Clone)]
 pub struct BasicBlock {
     pub id: BlockId,
+    pub exception_scopes: Vec<(u32, BlockId)>,
     pub instrs: Vec<MirInstr>,
 }
 

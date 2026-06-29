@@ -1,4 +1,3 @@
-use crate::gc;
 use crate::VTable;
 use crate::dynamic_call::helpers::{TAG_MASK, TAG_ARRAY, TAG_STRING, TAG_OBJECT, PAYLOAD_MASK, get_user_method};
 
@@ -9,7 +8,7 @@ use crate::dynamic_call::helpers::{TAG_MASK, TAG_ARRAY, TAG_STRING, TAG_OBJECT, 
 /// - Objects: forward to vtable/user method.
 /// Codegen declares this as dispatch_1 signature: (recv, arg, idx) -> u64
 #[no_mangle]
-pub unsafe extern "C" fn __bs_call_toString(mut recv: u64, arg: u64, idx_boxed: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_call_toString(mut recv: u64, arg: u64, idx_boxed: u64) -> u64 {
     let idx = f64::from_bits(idx_boxed) as i32;
     let mut tag = recv & TAG_MASK;
 
@@ -30,7 +29,7 @@ pub unsafe extern "C" fn __bs_call_toString(mut recv: u64, arg: u64, idx_boxed: 
                 } else {
                     // User object — forward to vtable method or fallback
                     if let Some(method_ptr) = get_user_method(recv, idx) {
-                        let f: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
+                        let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
                         return f(recv, arg);
                     }
                     return crate::types::string_utils::create_tagged_string("[object Object]");
@@ -104,7 +103,7 @@ pub unsafe extern "C" fn __bs_call_toString(mut recv: u64, arg: u64, idx_boxed: 
 
 // Custom dispatcher for indexOf (as both arrays and strings have it)
 #[no_mangle]
-pub unsafe extern "C" fn __bs_call_indexOf(mut recv: u64, search: u64, idx_boxed: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_call_indexOf(mut recv: u64, search: u64, idx_boxed: u64) -> u64 {
     let idx = f64::from_bits(idx_boxed) as i32;
     let mut tag = recv & TAG_MASK;
     if tag == TAG_OBJECT {
@@ -140,13 +139,13 @@ pub unsafe extern "C" fn __bs_call_indexOf(mut recv: u64, search: u64, idx_boxed
         let s = crate::get_c_string_from_tagged(recv);
         let pattern = crate::get_c_string_from_tagged(search);
         if let Some(pos) = s.find(pattern) {
-            gc::box_number(pos as f64)
+            crate::circ::box_number(pos as f64)
         } else {
-            gc::box_number(-1.0)
+            crate::circ::box_number(-1.0)
         }
     } else if tag == TAG_OBJECT {
         if let Some(method_ptr) = get_user_method(recv, idx) {
-            let f: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
+            let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
             f(recv, search)
         } else {
             panic!("Method indexOf not found on object");
@@ -157,7 +156,7 @@ pub unsafe extern "C" fn __bs_call_indexOf(mut recv: u64, search: u64, idx_boxed
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_call_next(recv: u64, arg1: u64, idx_boxed: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_call_next(recv: u64, arg1: u64, idx_boxed: u64) -> u64 {
     let idx = f64::from_bits(idx_boxed) as i32;
     let tag = recv & TAG_MASK;
     
@@ -176,18 +175,30 @@ pub unsafe extern "C" fn __bs_call_next(recv: u64, arg1: u64, idx_boxed: u64) ->
         // Re-check done status because generator might have just completed
         let is_done_val_after = crate::__bs_generator_is_done(recv);
         
-        let result_obj = crate::__bs_alloc(&crate::OBJECT_VTABLE, 8);
+        let result_obj = crate::__bs_alloc(&crate::core::vtable::GENERATOR_RESULT_VTABLE, 32);
         let payload = result_obj & PAYLOAD_MASK;
         let obj_ptr = payload as *mut u8;
         
-        crate::set_dynamic_property(obj_ptr, "value".to_string(), value);
-        crate::set_dynamic_property(obj_ptr, "done".to_string(), is_done_val_after);
+        // Zero out the dynamic props slot
+        let slot_props = obj_ptr.add(8) as *mut u64;
+        *slot_props = 0;
+        
+        // Write 'value' to first class field (offset 16)
+        let slot_value = obj_ptr.add(16) as *mut u64;
+        *slot_value = value;
+        
+        // Write 'done' to second class field (offset 24)
+        let slot_done = obj_ptr.add(24) as *mut u64;
+        *slot_done = is_done_val_after;
+        
+        // println!("__bs_call_next returning value for {:x}: {:x}", recv, value);
+        
         return result_obj;
     }
     
     if tag == TAG_OBJECT {
         if let Some(method_ptr) = get_user_method(recv, idx) {
-            let f: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
+            let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
             f(recv, arg1)
         } else {
             panic!("Method next not found on user object");
@@ -226,7 +237,7 @@ unsafe fn unbox_number(recv: u64) -> Option<f64> {
 
 /// `(number).toFixed(digits)` — formats a number with a fixed number of decimal places.
 #[no_mangle]
-pub unsafe extern "C" fn __bs_call_toFixed(recv: u64, digits_tagged: u64, _idx_boxed: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_call_toFixed(recv: u64, digits_tagged: u64, _idx_boxed: u64) -> u64 {
     let digits = f64::from_bits(digits_tagged) as usize;
     if let Some(val) = unbox_number(recv) {
         let s = format!("{:.prec$}", val, prec = digits);
@@ -236,7 +247,7 @@ pub unsafe extern "C" fn __bs_call_toFixed(recv: u64, digits_tagged: u64, _idx_b
     let idx = f64::from_bits(_idx_boxed) as i32;
     if recv & TAG_MASK == TAG_OBJECT {
         if let Some(method_ptr) = get_user_method(recv, idx) {
-            let f: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
+            let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
             return f(recv, digits_tagged);
         }
     }
@@ -245,7 +256,7 @@ pub unsafe extern "C" fn __bs_call_toFixed(recv: u64, digits_tagged: u64, _idx_b
 
 /// `(number).toPrecision(precision)` — formats a number to a given number of significant digits.
 #[no_mangle]
-pub unsafe extern "C" fn __bs_call_toPrecision(recv: u64, precision_tagged: u64, _idx_boxed: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_call_toPrecision(recv: u64, precision_tagged: u64, _idx_boxed: u64) -> u64 {
     let precision = f64::from_bits(precision_tagged) as usize;
     if let Some(val) = unbox_number(recv) {
         let s = if precision == 0 || val == 0.0 {
@@ -266,7 +277,7 @@ pub unsafe extern "C" fn __bs_call_toPrecision(recv: u64, precision_tagged: u64,
     let idx = f64::from_bits(_idx_boxed) as i32;
     if recv & TAG_MASK == TAG_OBJECT {
         if let Some(method_ptr) = get_user_method(recv, idx) {
-            let f: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
+            let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
             return f(recv, precision_tagged);
         }
     }

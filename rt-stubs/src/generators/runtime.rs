@@ -4,8 +4,10 @@ use std::sync::Mutex;
 
 #[repr(C)]
 pub struct GeneratorState {
+    pub poll_fn: extern "C-unwind" fn(*mut GeneratorState, u64) -> u64,
+    pub drop_fn: extern "C-unwind" fn(*mut u8),
+    pub trace_fn: extern "C-unwind" fn(*mut u8, *const ()),
     pub state_idx: i64,
-    pub poll_fn: extern "C" fn(*mut GeneratorState, u64) -> u64,
 }
 
 #[derive(Clone, Copy)]
@@ -19,7 +21,7 @@ pub static ARRAY_ITERATORS: Lazy<Mutex<HashMap<usize, ArrayIteratorState>>> = La
 });
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_generator_next(gen_tagged: u64, sent_value: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_generator_next(gen_tagged: u64, sent_value: u64) -> u64 {
     let tag = gen_tagged & 0xFFFF_0000_0000_0000;
     if tag == 0xFFFB_0000_0000_0000 {
         let arr_ptr = (gen_tagged & 0x0000_FFFF_FFFF_FFFF) as *mut crate::array::BsArray;
@@ -50,7 +52,7 @@ pub unsafe extern "C" fn __bs_generator_next(gen_tagged: u64, sent_value: u64) -
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_generator_is_done(gen_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_generator_is_done(gen_tagged: u64) -> u64 {
     let tag = gen_tagged & 0xFFFF_0000_0000_0000;
     if tag == 0xFFFB_0000_0000_0000 {
         let arr_ptr = (gen_tagged & 0x0000_FFFF_FFFF_FFFF) as *mut crate::array::BsArray;

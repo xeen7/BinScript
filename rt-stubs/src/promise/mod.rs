@@ -20,26 +20,25 @@ pub struct Promise {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_promise_new() -> u64 {
+pub unsafe extern "C-unwind" fn __bs_promise_new() -> u64 {
     let p = Box::new(Mutex::new(Promise {
         state: PromiseState::Pending,
         then_callbacks: Vec::new(),
     }));
     let ptr = Box::into_raw(p);
     let promise_tagged = (ptr as u64) | TAG_PROMISE;
-    crate::gc::GLOBAL_ROOTS.lock().unwrap().push(promise_tagged);
     promise_tagged
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_promise_static_resolve(value: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_promise_static_resolve(value: u64) -> u64 {
     let p = __bs_promise_new();
     __bs_promise_resolve(p, value);
     p
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_promise_resolve(promise_tagged: u64, value: u64) {
+pub unsafe extern "C-unwind" fn __bs_promise_resolve(promise_tagged: u64, value: u64) {
     let tag = promise_tagged & 0xFFFF_0000_0000_0000;
     if tag != TAG_PROMISE {
         return;
@@ -76,9 +75,9 @@ pub unsafe fn add_internal_then(promise_tagged: u64, cb: PromiseCallback) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_promise_then(promise_tagged: u64, callback_closure: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_promise_then(promise_tagged: u64, callback_closure: u64) -> u64 {
     let closure_ptr = (callback_closure & 0x0000_FFFF_FFFF_FFFF) as *const u64;
-    let cb_fn: extern "C" fn(u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     
     let new_promise = __bs_promise_new();
     
@@ -91,7 +90,7 @@ pub unsafe extern "C" fn __bs_promise_then(promise_tagged: u64, callback_closure
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_async_drive(gen_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_async_drive(gen_tagged: u64) -> u64 {
     let return_promise = __bs_promise_new();
     __bs_async_step(gen_tagged, 0, return_promise);
     return_promise
@@ -103,6 +102,7 @@ unsafe fn __bs_async_step(gen_tagged: u64, sent_val: u64, return_promise: u64) {
     let ptr = (gen_tagged & 0x0000_FFFF_FFFF_FFFF) as *mut crate::GeneratorState;
     if (*ptr).state_idx == -1 {
         __bs_promise_resolve(return_promise, yielded_val);
+        crate::circ::circ_dec_tagged(gen_tagged);
         return;
     }
     

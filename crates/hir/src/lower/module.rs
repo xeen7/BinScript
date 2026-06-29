@@ -299,7 +299,24 @@ impl LowerCtx {
                             match member {
                                 ClassElement::PropertyDefinition(prop) => {
                                     if let PropertyKey::StaticIdentifier(id) = &prop.key {
-                                        fields.push(id.name.to_string());
+                                        let field_type = if let Some(type_ann) = &prop.type_annotation {
+                                            match &type_ann.type_annotation {
+                                                oxc::ast::ast::TSType::TSNumberKeyword(_) |
+                                                oxc::ast::ast::TSType::TSStringKeyword(_) |
+                                                oxc::ast::ast::TSType::TSBooleanKeyword(_) => HirType::Primitive,
+                                                oxc::ast::ast::TSType::TSTypeReference(ref_type) => {
+                                                    if let oxc::ast::ast::TSTypeName::IdentifierReference(ident) = &ref_type.type_name {
+                                                        HirType::Object(ident.name.to_string())
+                                                    } else {
+                                                        HirType::Any
+                                                    }
+                                                }
+                                                _ => HirType::Any,
+                                            }
+                                        } else {
+                                            HirType::Any
+                                        };
+                                        fields.push((id.name.to_string(), field_type));
                                     }
                                 }
                                 ClassElement::MethodDefinition(method) => {

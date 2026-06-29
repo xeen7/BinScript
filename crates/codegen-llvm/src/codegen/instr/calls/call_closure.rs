@@ -37,7 +37,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         .map(|a| self.val(a).map(|v| v.into()))
         .collect::<CompileResult<_>>()?;
 
-    let rv = self.builder.build_indirect_call(fn_ty, fn_ptr, &av, "closure_call").unwrap();
+    let rv = self.emit_indirect_call_with_invoke(fn_ty, fn_ptr, &av, "closure_call").unwrap();
     let v = rv
         .try_as_basic_value()
         .basic()

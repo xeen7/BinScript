@@ -246,7 +246,20 @@ pub fn run(cfg: &CompileConfig) -> CompileResult<()> {
 
     // ── Phase 5: Lower to MIR ──────────────────────────────────────────────
     tracing::info!("Lowering to MIR");
-    let mir_module = mir::lower_module(&combined_hir)?;
+    let mut mir_module = mir::lower_module(&combined_hir)?;
+    for f in &mir_module.functions {
+        if f.name.contains("getDetails") {
+            println!("BEFORE OWNERSHIP INFERENCE getDetails: {:#?}", f.blocks[0].instrs);
+        }
+    }
+    ownership_inference::run_ownership_analysis(&mut mir_module);
+    mir::lifecycle::run_lifecycle_pass(&mut mir_module);
+    tracing::info!("MIR main_body: {:#?}", mir_module.main_body);
+    for func in &mir_module.functions {
+        if func.name.contains("runTests") {
+            println!("MIR outerGen: {:#?}", func);
+        }
+    }
     tracing::debug!(
         "MIR: {} functions + main ({} blocks)",
         mir_module.functions.len(),
@@ -257,7 +270,7 @@ pub fn run(cfg: &CompileConfig) -> CompileResult<()> {
     tracing::info!("Generating LLVM IR");
     let ctx = Context::create();
     let file_name = cfg.input.display().to_string();
-    let mut codegen = codegen_llvm::LlvmCodegen::new(&ctx, &file_name);
+    let mut codegen = codegen_llvm::LlvmCodegen::new(&ctx, &file_name, cfg.verify_memory);
     codegen.emit_module(&mir_module)?;
     codegen.verify()?;
 

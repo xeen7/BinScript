@@ -3,3 +3,26 @@
 /.binscript_cache
 /lib
 /scratch
+
+# Debug and log files
+*.log
+*.txt
+*.ll
+*.o
+*.a
+*.mir
+*.out
+
+# Generated executables (tests and tools)
+/check_size
+/t[0-9]*
+/test*
+!/tests/
+!/test*.rs
+!/test*.c
+!/test*.ts
+/test_bin
+/tests/*_bin
+/tests/*_bin_*
+/tests/*.ll
+/tests/out/

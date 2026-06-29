@@ -2,7 +2,7 @@
 macro_rules! dispatch_0_args {
     ($name:ident, $method_name:expr, $arr_fn:expr, $str_fn:expr) => {
         #[no_mangle]
-        pub unsafe extern "C" fn $name(mut recv: u64, idx_boxed: u64) -> u64 {
+        pub unsafe extern "C-unwind" fn $name(mut recv: u64, idx_boxed: u64) -> u64 {
             let idx = f64::from_bits(idx_boxed) as i32;
             let mut tag = recv & TAG_MASK;
             if tag == TAG_OBJECT {
@@ -66,14 +66,14 @@ macro_rules! dispatch_0_args {
             }
 
             if tag == TAG_ARRAY {
-                let f: unsafe extern "C" fn(u64) -> u64 = $arr_fn;
+                let f: unsafe extern "C-unwind" fn(u64) -> u64 = $arr_fn;
                 f(recv)
             } else if tag == TAG_STRING {
-                let f: unsafe extern "C" fn(u64) -> u64 = $str_fn;
+                let f: unsafe extern "C-unwind" fn(u64) -> u64 = $str_fn;
                 f(recv)
             } else if tag == TAG_OBJECT {
                 if let Some(method_ptr) = $crate::dynamic_call::helpers::get_user_method(recv, idx) {
-                    let f: unsafe extern "C" fn(u64) -> u64 = std::mem::transmute(method_ptr);
+                    let f: unsafe extern "C-unwind" fn(u64) -> u64 = std::mem::transmute(method_ptr);
                     f(recv)
                 } else {
                     if $method_name == "toString" {
@@ -100,7 +100,7 @@ macro_rules! dispatch_0_args {
 macro_rules! dispatch_1_arg {
     ($name:ident, $method_name:expr, $arr_fn:expr, $str_fn:expr) => {
         #[no_mangle]
-        pub unsafe extern "C" fn $name(mut recv: u64, arg1: u64, idx_boxed: u64) -> u64 {
+        pub unsafe extern "C-unwind" fn $name(mut recv: u64, arg1: u64, idx_boxed: u64) -> u64 {
             let idx = f64::from_bits(idx_boxed) as i32;
             let mut tag = recv & TAG_MASK;
             if tag == TAG_OBJECT {
@@ -131,14 +131,14 @@ macro_rules! dispatch_1_arg {
                 }
             }
             if tag == TAG_ARRAY {
-                let f: unsafe extern "C" fn(u64, u64) -> u64 = $arr_fn;
+                let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = $arr_fn;
                 f(recv, arg1)
             } else if tag == TAG_STRING {
-                let f: unsafe extern "C" fn(u64, u64) -> u64 = $str_fn;
+                let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = $str_fn;
                 f(recv, arg1)
             } else if tag == TAG_OBJECT {
                 if let Some(method_ptr) = $crate::dynamic_call::helpers::get_user_method(recv, idx) {
-                    let f: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
+                    let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(method_ptr);
                     f(recv, arg1)
                 } else {
                     panic!("Method not found on user object");
@@ -154,7 +154,7 @@ macro_rules! dispatch_1_arg {
 macro_rules! dispatch_2_args {
     ($name:ident, $method_name:expr, $arr_fn:expr, $str_fn:expr) => {
         #[no_mangle]
-        pub unsafe extern "C" fn $name(mut recv: u64, arg1: u64, arg2: u64, idx_boxed: u64) -> u64 {
+        pub unsafe extern "C-unwind" fn $name(mut recv: u64, arg1: u64, arg2: u64, idx_boxed: u64) -> u64 {
             let idx = f64::from_bits(idx_boxed) as i32;
             let mut tag = recv & TAG_MASK;
             if tag == TAG_OBJECT {
@@ -185,14 +185,14 @@ macro_rules! dispatch_2_args {
                 }
             }
             if tag == TAG_ARRAY {
-                let f: unsafe extern "C" fn(u64, u64, u64) -> u64 = $arr_fn;
+                let f: unsafe extern "C-unwind" fn(u64, u64, u64) -> u64 = $arr_fn;
                 f(recv, arg1, arg2)
             } else if tag == TAG_STRING {
-                let f: unsafe extern "C" fn(u64, u64, u64) -> u64 = $str_fn;
+                let f: unsafe extern "C-unwind" fn(u64, u64, u64) -> u64 = $str_fn;
                 f(recv, arg1, arg2)
             } else if tag == TAG_OBJECT {
                 if let Some(method_ptr) = $crate::dynamic_call::helpers::get_user_method(recv, idx) {
-                    let f: unsafe extern "C" fn(u64, u64, u64) -> u64 = std::mem::transmute(method_ptr);
+                    let f: unsafe extern "C-unwind" fn(u64, u64, u64) -> u64 = std::mem::transmute(method_ptr);
                     f(recv, arg1, arg2)
                 } else {
                     panic!("Method not found on user object");
@@ -208,7 +208,7 @@ macro_rules! dispatch_2_args {
 macro_rules! dispatch_3_args {
     ($name:ident, $method_name:expr, $arr_fn:expr, $str_fn:expr) => {
         #[no_mangle]
-        pub unsafe extern "C" fn $name(mut recv: u64, arg1: u64, arg2: u64, arg3: u64, idx_boxed: u64) -> u64 {
+        pub unsafe extern "C-unwind" fn $name(mut recv: u64, arg1: u64, arg2: u64, arg3: u64, idx_boxed: u64) -> u64 {
             let idx = f64::from_bits(idx_boxed) as i32;
             let mut tag = recv & TAG_MASK;
             if tag == TAG_OBJECT {
@@ -239,14 +239,14 @@ macro_rules! dispatch_3_args {
                 }
             }
             if tag == TAG_ARRAY {
-                let f: unsafe extern "C" fn(u64, u64, u64, u64) -> u64 = $arr_fn;
+                let f: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = $arr_fn;
                 f(recv, arg1, arg2, arg3)
             } else if tag == TAG_STRING {
-                let f: unsafe extern "C" fn(u64, u64, u64, u64) -> u64 = $str_fn;
+                let f: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = $str_fn;
                 f(recv, arg1, arg2, arg3)
             } else if tag == TAG_OBJECT {
                 if let Some(method_ptr) = $crate::dynamic_call::helpers::get_user_method(recv, idx) {
-                    let f: unsafe extern "C" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(method_ptr);
+                    let f: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(method_ptr);
                     f(recv, arg1, arg2, arg3)
                 } else {
                     panic!("Method not found on user object");

@@ -23,6 +23,8 @@ use crate::nan_box::NanBoxHelper;
 mod func;
 mod helpers;
 mod instr;
+mod drop_fn_gen;
+mod trace_fn_gen;
 
 // ===========================================================================
 // Public interface
@@ -57,6 +59,8 @@ pub struct LlvmCodegen<'ctx> {
     str_cache: HashMap<String, GlobalValue<'ctx>>,
 
     // --- Stage 2 additions ---
+    drop_fns: HashMap<String, FunctionValue<'ctx>>,
+    trace_fns: HashMap<String, FunctionValue<'ctx>>,
     vtables: HashMap<String, GlobalValue<'ctx>>,
     classes: HashMap<String, hir::HirClass>,
 
@@ -66,11 +70,47 @@ pub struct LlvmCodegen<'ctx> {
     gen_state_ty: Option<inkwell::types::StructType<'ctx>>,
     resume_blocks: HashMap<u32, inkwell::basic_block::BasicBlock<'ctx>>,
     gen_num_args: u32,
-    shadow_frame_ty: inkwell::types::StructType<'ctx>,
+
+    // Arena pointers for each active RegionId in the current function
+    pub arena_ptrs: HashMap<u32, PointerValue<'ctx>>,
+
+    // Exception handling
+    pub exception_scope_stack: Vec<(u32, inkwell::basic_block::BasicBlock<'ctx>)>,
+    
+    pub deferred_clears: Vec<u32>,
+    /// Maps catch_bb → compile-time RAII slot index at TryEnter.
+    /// The catch LP only cleans up slots with index >= this value.
+    pub catch_raii_indices: HashMap<inkwell::basic_block::BasicBlock<'ctx>, usize>,
+    
+    // RAII Frame Base for absolute scope depth (generators only)
+    pub frame_base: Option<inkwell::values::IntValue<'ctx>>,
+
+    // ── Zero-cost RAII cleanup landing pads ─────────────────────────────────
+    /// Compile-time RAII slots: flag + value allocas per ScopeGuardPush site.
+    pub raii_slots: Vec<RaiiSlot<'ctx>>,
+    /// Maps MIR register → RAII slot index.
+    pub raii_reg_to_slot: HashMap<MirReg, usize>,
+    /// Cached cleanup-only landing pad (for calls outside try blocks).
+    pub raii_cleanup_bb: Option<inkwell::basic_block::BasicBlock<'ctx>>,
+    /// Counter tracking how many ScopeGuardPush instructions have been emitted.
+    pub raii_push_counter: usize,
+
+    pub verify_memory: bool,
+}
+
+/// A compile-time RAII slot with liveness flag and value storage.
+/// Replaces the runtime GUARD_STACK for non-generator functions.
+pub struct RaiiSlot<'ctx> {
+    /// Stack-allocated i1 flag: true when the object is live.
+    pub flag_ptr: PointerValue<'ctx>,
+    /// Stack-allocated i64 slot storing the NaN-boxed object value.
+    pub val_ptr: PointerValue<'ctx>,
+    /// Name of the release function to call during cleanup.
+    pub release_fn_name: String,
 }
 
 impl<'ctx> LlvmCodegen<'ctx> {
-    pub fn new(ctx: &'ctx Context, module_name: &str) -> Self {
+    pub fn new(ctx: &'ctx Context, module_name: &str, verify_memory: bool) -> Self {
         let module = ctx.create_module(module_name);
         let builder = ctx.create_builder();
         let i64_ty = ctx.i64_type();
@@ -80,13 +120,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let ptr_ty = ctx.ptr_type(AddressSpace::default());
         let void_ty = ctx.void_type();
         let nan = NanBoxHelper::new(ctx, i64_ty, f64_ty, ctx.bool_type());
-        
-        let shadow_frame_ty = ctx.struct_type(&[
-            ptr_ty.into(), // prev
-            i32_ty.into(), // num_roots
-            i32_ty.into(), // _pad
-            ptr_ty.into(), // roots
-        ], false);
 
         Self {
             ctx,
@@ -105,6 +138,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             bbs: HashMap::new(),
             str_counter: 0,
             str_cache: HashMap::new(),
+            drop_fns: HashMap::new(),
+            trace_fns: HashMap::new(),
             vtables: HashMap::new(),
             classes: HashMap::new(),
             gen_state_ptr: None,
@@ -112,7 +147,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
             gen_state_ty: None,
             resume_blocks: HashMap::new(),
             gen_num_args: 0,
-            shadow_frame_ty,
+            arena_ptrs: HashMap::new(),
+            exception_scope_stack: Vec::new(),
+            catch_raii_indices: HashMap::new(),
+            deferred_clears: Vec::new(),
+            frame_base: None,
+            raii_slots: Vec::new(),
+            raii_reg_to_slot: HashMap::new(),
+            raii_cleanup_bb: None,
+            raii_push_counter: 0,
+            verify_memory,
         }
     }
 
@@ -135,7 +179,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.funcs.insert(f.name.clone(), fv);
         }
 
-        // Generate static global vtables (references user functions).
+        // Generate RAII drop functions for classes before emitting vtables.
+        self.generate_drop_fns()?;
+        // Generate trace functions for cycle collector before emitting vtables.
+        self.generate_trace_fns()?;
+
+        // Generate static global vtables (references user functions, drop_fns and trace_fns).
         self.emit_vtables(mir)?;
 
         // Emit user functions.
@@ -177,12 +226,59 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // int putchar(int)
         add(self, "putchar", self.i32_ty.fn_type(&[self.i32_ty.into()], false));
 
-        // ptr __bs_alloc(ptr vtable_ptr, i64 size_in_bytes) -> i64
+        // ptr __bs_alloc(ptr vtable, i64 size)
         add(self, "__bs_alloc", self.i64_ty.fn_type(&[self.ptr_ty.into(), self.i64_ty.into()], false));
+
+        // ptr __bs_alloc_acyclic(ptr vtable, i64 size)
+        add(self, "__bs_alloc_acyclic", self.i64_ty.fn_type(&[self.ptr_ty.into(), self.i64_ty.into()], false));
+        // ptr __bs_alloc_owned(ptr vtable_ptr, i64 size_in_bytes) -> i64
+        add(self, "__bs_alloc_owned", self.i64_ty.fn_type(&[self.ptr_ty.into(), self.i64_ty.into()], false));
+        // void __bs_free_owned(ptr obj_ptr)
+        add(self, "__bs_free_owned", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        // void circ_inc(ptr header)
+        add(self, "circ_inc", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        // void circ_dec(ptr header)
+        add(self, "circ_dec", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        // void free(ptr mem)
+        add(self, "free", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        
+        // void __bs_cycle_collector_init()
+        add(self, "__bs_cycle_collector_init", self.void_ty.fn_type(&[], false));
+
+        // --- Verify Mode ---
+        add(self, "__bs_set_verify_memory", self.void_ty.fn_type(&[self.i8_ty.into()], false));
+        add(self, "__verify_load", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        add(self, "__verify_store", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        add(self, "__bs_verify_check_leaks", self.void_ty.fn_type(&[], false));
+        
+        // --- Arena Allocator ---
+        // ptr arena_create(i64 initial_capacity)
+        add(self, "arena_create", self.ptr_ty.fn_type(&[self.i64_ty.into()], false));
+        // ptr arena_alloc(ptr arena, i64 size, i64 align)
+        add(self, "arena_alloc", self.ptr_ty.fn_type(&[self.ptr_ty.into(), self.i64_ty.into(), self.i64_ty.into()], false));
+        // void arena_register_dtor(ptr arena, ptr obj, ptr drop_fn)
+        add(self, "arena_register_dtor", self.void_ty.fn_type(&[self.ptr_ty.into(), self.ptr_ty.into(), self.ptr_ty.into()], false));
+        // void arena_reset(ptr arena)
+        add(self, "arena_reset", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        // void arena_destroy(ptr arena)
+        add(self, "arena_destroy", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+
+        // --- RAII Scope Guards ---
+        // void __bs_scope_guard_push(i32 scope_id, ptr obj_ptr, ptr release_fn)
+        add(self, "__bs_scope_guard_push", self.void_ty.fn_type(&[self.i32_ty.into(), self.i64_ty.into(), self.ptr_ty.into()], false));
+        // void __bs_scope_guard_cancel(i32 frame_base, i32 scope_id, i64 obj_ptr)
+        add(self, "__bs_scope_guard_cancel", self.void_ty.fn_type(&[self.i32_ty.into(), self.i32_ty.into(), self.i64_ty.into()], false));
+        // void __bs_scope_guard_flush_to(i32 frame_base, i32 target_scope_id)
+        add(self, "__bs_scope_guard_flush_to", self.void_ty.fn_type(&[self.i32_ty.into(), self.i32_ty.into()], false));
+
         // i64 __bs_instanceof(i64 obj, i64 shape_id) -> i64
         add(self, "__bs_instanceof", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         // ptr __bs_alloc_closure(i64 size_in_bytes) -> i64
         add(self, "__bs_alloc_closure", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
+        // void circ_dec_tagged(i64)
+        add(self, "circ_dec_tagged", self.void_ty.fn_type(&[self.i64_ty.into()], false));
+        // void circ_inc_tagged(i64)
+        add(self, "circ_inc_tagged", self.void_ty.fn_type(&[self.i64_ty.into()], false));
         // ptr __bs_alloc_generator(i64 size_in_bytes) -> i64
         add(self, "__bs_alloc_generator", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
         // i64 __bs_generator_next(i64 gen_ptr, i64 sent_val) -> i64
@@ -191,6 +287,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_generator_is_done", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
         // void __bs_drain_microtasks()
         add(self, "__bs_drain_microtasks", self.void_ty.fn_type(&[], false));
+        // void __bs_drain_finalizers()
+        add(self, "__bs_drain_finalizers", self.void_ty.fn_type(&[], false));
         // i64 __bs_promise_new()
         add(self, "__bs_promise_new", self.i64_ty.fn_type(&[], false));
         // void __bs_promise_resolve(i64 promise_tagged, i64 value_tagged)
@@ -217,6 +315,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_prop_get", self.i64_ty.fn_type(&[self.i64_ty.into(), self.ptr_ty.into(), self.i32_ty.into()], false));
         // i64 __bs_prop_set(i64 obj_tagged, ptr prop_str, i32 len, i64 val_tagged)
         add(self, "__bs_prop_set", self.i64_ty.fn_type(&[self.i64_ty.into(), self.ptr_ty.into(), self.i32_ty.into(), self.i64_ty.into()], false));
+        // i64 __bs_prop_set_moved(i64 obj_tagged, ptr prop_str, i32 len, i64 val_tagged)
+        add(self, "__bs_prop_set_moved", self.i64_ty.fn_type(&[self.i64_ty.into(), self.ptr_ty.into(), self.i32_ty.into(), self.i64_ty.into()], false));
         // i64 __bs_new_object() -> i64
         add(self, "__bs_new_object", self.i64_ty.fn_type(&[], false));
 
@@ -298,6 +398,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_WeakMap_new_1", unary_c);
         add(self, "__bs_WeakSet_new_0", nullary_c);
         add(self, "__bs_WeakSet_new_1", unary_c);
+        add(self, "__bs_WeakRef_new_1", unary_c);
+        add(self, "__bs_FinalizationRegistry_new_1", unary_c);
 
         let date_n_c = self.i64_ty.fn_type(&[
             self.i64_ty.into(),
@@ -420,14 +522,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_os_platform", self.i64_ty.fn_type(&[], false));
         // i64 __bs_os_arch() -> i64
         add(self, "__bs_os_arch", self.i64_ty.fn_type(&[], false));
-
-        // --- GC & Shadow Stack ---
-        // void __bs_shadow_push(ptr frame)
-        add(self, "__bs_shadow_push", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
-        // void __bs_shadow_pop()
-        add(self, "__bs_shadow_pop", self.void_ty.fn_type(&[], false));
-        // void __bs_safepoint_poll()
-        add(self, "__bs_safepoint_poll", self.void_ty.fn_type(&[], false));
 
         // --- Stage 12: Exception Handling ---
         // int _setjmp(ptr) -> i32
@@ -624,8 +718,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     // ── helpers ────────────────────────────────────────────────────────────
 
+    pub fn flush_deferred_clears(&mut self) {
+        let clears: Vec<_> = self.deferred_clears.drain(..).collect();
+        for reg in clears {
+            let undef_val = self.i64_ty.const_int(crate::nan_box::TAG_UNDEFINED, false);
+            self.store(reg, undef_val);
+        }
+    }
+
     /// Resolve a `MirOperand` to an LLVM `i64` value.
-    pub(super) fn val(&mut self, op: &MirOperand) -> CompileResult<IntValue<'ctx>> {
+    pub fn val(&mut self, op: &MirOperand) -> CompileResult<IntValue<'ctx>> {
         match op {
             MirOperand::Reg(r) => {
                 let a = self.regs.get(r).ok_or_else(|| CompileError::Codegen {

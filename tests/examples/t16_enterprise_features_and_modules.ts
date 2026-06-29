@@ -117,6 +117,7 @@ async function main() {
             throw new Error("Critical system fault");
         } catch (innerErr: any) {
             catchCount += 1;
+             
             if (innerErr.message === "Critical system fault") {
                 throw innerErr; 
             }

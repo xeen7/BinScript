@@ -5,7 +5,7 @@ use super::vtable::VTable;
 /// Returns TAG_TRUE (0xFFF4_0000_0000_0000) if a match is found,
 /// otherwise TAG_FALSE (0xFFF3_0000_0000_0000).
 #[no_mangle]
-pub unsafe extern "C" fn __bs_instanceof(obj_val: u64, target_shape_id: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_instanceof(obj_val: u64, target_shape_id: u64) -> u64 {
     // target_shape_id is passed as a NaN-boxed float, so we convert its bits back to f64 and cast to u64
     let target_shape_id_f64 = f64::from_bits(target_shape_id);
     let target_shape_id_u64 = target_shape_id_f64 as u64;

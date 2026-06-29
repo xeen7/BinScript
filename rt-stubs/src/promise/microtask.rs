@@ -16,12 +16,16 @@ where
 /// Drains and executes all pending microtasks.
 /// Call this after resolving a promise or at the end of the script.
 #[no_mangle]
-pub extern "C" fn __bs_drain_microtasks() {
+pub extern "C-unwind" fn __bs_drain_microtasks() {
     loop {
         let mut tasks = {
             let mut q = MICROTASK_QUEUE.lock().unwrap();
             if q.is_empty() {
-                break;
+                // Also drain finalizers before completely breaking
+                unsafe { crate::finalization::__bs_drain_finalizers(); }
+                if q.is_empty() { // check again in case finalizers enqueued microtasks
+                    break;
+                }
             }
             std::mem::take(&mut *q)
         };

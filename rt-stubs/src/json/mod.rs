@@ -1,14 +1,13 @@
 pub mod tape;
-use crate::gc;
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_json_parse(str_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_json_parse(str_tagged: u64) -> u64 {
     let s = crate::get_c_string_from_tagged(str_tagged);
     crate::json::tape::__bs_json_parse_lazy(s.as_ptr(), s.len() as u32)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_json_stringify(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_json_stringify(val: u64) -> u64 {
     let mut out = String::new();
     stringify_value(val, &mut out);
     crate::create_tagged_string(&out)
@@ -65,7 +64,7 @@ unsafe fn stringify_value(val: u64, out: &mut String) {
                 if i > 0 {
                     out.push(',');
                 }
-                let elem = crate::array::__bs_array_get(val, gc::box_number(i as f64));
+                let elem = crate::array::__bs_array_get(val, crate::circ::box_number(i as f64));
                 stringify_value(elem, out);
             }
             out.push(']');
@@ -84,28 +83,53 @@ unsafe fn stringify_value(val: u64, out: &mut String) {
             } else if tag == 0xFFF6_0000_0000_0000 {
                 // Object
                 out.push('{');
-                let map = crate::DYNAMIC_PROPERTIES.lock().unwrap();
                 let payload = val & 0x0000_FFFF_FFFF_FFFF;
-                if let Some(obj_entry) = map.get(&(payload as usize)) {
-                    let mut first = true;
-                    // Sort keys to ensure stable output for tests
-                    let mut keys: Vec<&String> = obj_entry.keys().collect();
+                let obj_ptr = payload as *mut u8;
+                let mut first = true;
+                
+                // 1. Stringify class fields
+                let vtable_ptr = *(obj_ptr as *const *const crate::VTable);
+                if !vtable_ptr.is_null() {
+                    let vtable = &*vtable_ptr;
+                    let fields_count = vtable.fields_count as usize;
+                    if fields_count > 0 && !vtable.field_names.is_null() {
+                        for i in 0..fields_count {
+                            let name_ptr = *vtable.field_names.add(i);
+                            if !name_ptr.is_null() {
+                                let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const libc::c_char);
+                                if let Ok(name_str) = name_cstr.to_str() {
+                                    if !name_str.starts_with("__") && name_str != "[[PrimitiveValue]]" {
+                                        let val_ptr = (obj_ptr as *const u64).add(2 + i);
+                                        if (*val_ptr & 0xFFFF_0000_0000_0000) != 0xFFF1_0000_0000_0000 {
+                                            if !first { out.push(','); }
+                                            first = false;
+                                            out.push('"'); out.push_str(name_str); out.push_str("\":");
+                                            stringify_value(*val_ptr, out);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 2. Stringify inline properties
+                let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+                if !unsafe { *props_slot }.is_null() {
+                    let map = unsafe { &**props_slot };
+                    let mut keys: Vec<&String> = map.keys().collect();
                     keys.sort();
                     for k in keys {
-                        if k == "[[PrimitiveValue]]" || k == "source" || k == "flags" {
+                        if k == "[[PrimitiveValue]]" || k == "source" || k == "flags" || k.starts_with("__") {
                             continue;
                         }
-                        let v = obj_entry[k];
+                        let v = map[k];
                         if (v & 0xFFFF_0000_0000_0000) == 0xFFF1_0000_0000_0000 {
-                            continue; // undefined values are skipped
+                            continue;
                         }
-                        if !first {
-                            out.push(',');
-                        }
+                        if !first { out.push(','); }
                         first = false;
-                        out.push('"');
-                        out.push_str(k);
-                        out.push_str("\":");
+                        out.push('"'); out.push_str(k); out.push_str("\":");
                         stringify_value(v, out);
                     }
                 }

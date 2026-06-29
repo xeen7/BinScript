@@ -30,7 +30,7 @@ pub unsafe extern "C" fn __bs_json_parse_lazy(ptr: *const u8, len: u32) -> u64 {
     
     // Register to global roots to prevent the JSON tape itself from being collected
     let tagged = (boxed_ptr as u64) | TAG_JSON_TAPE;
-    crate::gc::GLOBAL_ROOTS.lock().unwrap().push(tagged);
+    // crate::circ::GLOBAL_ROOTS.lock().unwrap().push(tagged);
     tagged
 }
 
@@ -62,7 +62,7 @@ pub unsafe extern "C" fn __bs_json_tape_get(tape_tagged: u64, key_ptr: *const u8
         if let Some(field) = val.get(key_str) {
             if field.is_number() {
                 let num = field.as_f64().unwrap_or(0.0);
-                return crate::gc::box_number(num);
+                return crate::circ::box_number(num);
             } else if field.is_str() {
                 let s = field.as_str().unwrap_or("");
                 return crate::create_tagged_string(s);
@@ -101,7 +101,7 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
         }
         if let Ok(s) = std::str::from_utf8(prop_slice) {
             if let Ok(idx) = s.parse::<f64>() {
-                let idx_boxed = crate::gc::box_number(idx);
+                let idx_boxed = crate::circ::box_number(idx);
                 return crate::array::__bs_array_get(obj_tagged, idx_boxed);
             }
             // Fall through to check dynamic properties for arrays
@@ -139,20 +139,24 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
         if fields_count > 0 && !vtable.field_names.is_null() {
             for i in 0..fields_count {
                 let name_ptr = *vtable.field_names.add(i);
-                if !name_ptr.is_null() {
-                    let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const libc::c_char);
-                    let name_bytes = name_cstr.to_bytes();
-                    if name_bytes == prop_slice {
-                        let slot_ptr = (obj_ptr as *const u64).add(1 + i);
-                        return *slot_ptr;
-                    }
+                let name_len = libc::strlen(name_ptr as *const i8) as usize;
+                let name_slice = std::slice::from_raw_parts(name_ptr as *const u8, name_len);
+                if name_slice == prop_slice {
+                    let field_slot = (obj_ptr as *mut u64).add(2 + i);
+                    return *field_slot;
                 }
             }
         }
     }
 
-    // 2. Check dynamic properties
+    // 2. Check inline and dynamic properties
     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
+        if tag == 0xFFF6_0000_0000_0000 {
+            let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+            if let Some(val) = crate::objects::dynamic_props::get_inline_property(props_slot, prop_name) {
+                return val;
+            }
+        }
         if let Some(val) = crate::get_dynamic_property(obj_ptr, prop_name) {
             return val;
         }
@@ -192,6 +196,10 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
                 }
                 // Check dynamic properties of the prototype
                 if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
+                    let props_slot = proto_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+                    if let Some(val) = crate::objects::dynamic_props::get_inline_property(props_slot, prop_name) {
+                        return val;
+                    }
                     if let Some(val) = crate::get_dynamic_property(proto_ptr, prop_name) {
                         return val;
                     }
@@ -218,7 +226,7 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
         let prop_slice = std::slice::from_raw_parts(prop_str, len as usize);
         if let Ok(s) = std::str::from_utf8(prop_slice) {
             if let Ok(idx) = s.parse::<f64>() {
-                let idx_boxed = crate::gc::box_number(idx);
+                let idx_boxed = crate::circ::box_number(idx);
                 crate::array::__bs_array_set(obj_tagged, idx_boxed, val_tagged);
             }
         }
@@ -248,7 +256,12 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
                     let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const libc::c_char);
                     let name_bytes = name_cstr.to_bytes();
                     if name_bytes == prop_slice {
-                        let slot_mut_ptr = (obj_ptr as *mut u64).add(1 + i);
+                        let slot_mut_ptr = (obj_ptr as *mut u64).add(2 + i);
+                        let old_val = *slot_mut_ptr;
+                        crate::circ::circ_inc_tagged(val_tagged);
+                        if old_val != 0 {
+                            crate::circ::circ_dec_tagged(old_val);
+                        }
                         *slot_mut_ptr = val_tagged;
                         return;
                     }
@@ -257,8 +270,75 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
         }
     }
 
-    // 2. Otherwise set as dynamic property
+    // 2. Otherwise set as inline property
     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
-        crate::set_dynamic_property(obj_ptr, prop_name.to_string(), val_tagged);
+        if tag == 0xFFF6_0000_0000_0000 {
+            let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+            crate::objects::dynamic_props::set_inline_property(props_slot, prop_name.to_string(), val_tagged);
+        } else {
+            crate::set_dynamic_property(obj_ptr, prop_name.to_string(), val_tagged);
+        }
     }
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *const u8, prop_len: u32, val_tagged: u64) -> u64 {
+    let tag = obj_tagged & 0xFFFF_0000_0000_0000;
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 {
+        let prop_slice = std::slice::from_raw_parts(prop_ptr, prop_len as usize);
+        if let Ok(s) = std::str::from_utf8(prop_slice) {
+            if let Ok(idx) = s.parse::<f64>() {
+                let idx_boxed = crate::circ::box_number(idx);
+                crate::array::__bs_array_set(obj_tagged, idx_boxed, val_tagged);
+            }
+        }
+        return val_tagged;
+    }
+    
+    let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;
+    if payload == 0 {
+        return val_tagged;
+    }
+
+    let prop_slice = std::slice::from_raw_parts(prop_ptr, prop_len as usize);
+    let obj_ptr = payload as *mut u8;
+    
+    // 1. Check class fields if vtable is present (only objects)
+    if tag == 0xFFF6_0000_0000_0000 {
+        let vtable_ptr = *(obj_ptr as *const *const crate::VTable);
+        if !vtable_ptr.is_null() {
+            let vtable = &*vtable_ptr;
+            let fields_count = vtable.fields_count as usize;
+            if fields_count > 0 && !vtable.field_names.is_null() {
+                for i in 0..fields_count {
+                    let name_ptr = *vtable.field_names.add(i);
+                    if !name_ptr.is_null() {
+                        let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const libc::c_char);
+                        let name_bytes = name_cstr.to_bytes();
+                        if name_bytes == prop_slice {
+                            let slot_mut_ptr = (obj_ptr as *mut u64).add(2 + i);
+                            let old_val = *slot_mut_ptr;
+                            // Move semantics: do NOT call circ_inc_tagged(val_tagged)
+                            if old_val != 0 {
+                                crate::circ::circ_dec_tagged(old_val);
+                            }
+                            *slot_mut_ptr = val_tagged;
+                            return val_tagged;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 2. Otherwise set as inline property
+    if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
+        if tag == 0xFFF6_0000_0000_0000 {
+            let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+            crate::objects::dynamic_props::set_inline_property_moved(props_slot, prop_name.to_string(), val_tagged);
+        } else {
+            crate::objects::dynamic_props::set_dynamic_property_moved(obj_ptr, prop_name.to_string(), val_tagged);
+        }
+    }
+    val_tagged
 }

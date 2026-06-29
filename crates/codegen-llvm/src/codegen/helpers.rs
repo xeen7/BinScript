@@ -32,6 +32,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.i64_ty.into(), // shape_id
             self.i64_ty.into(), // fields_count
             self.ptr_ty.into(), // field_names
+            self.ptr_ty.into(), // drop_fn
+            self.ptr_ty.into(), // trace_fn
         ];
         for _ in 0..method_names.len() {
             vtable_fields.push(self.ptr_ty.into());
@@ -67,7 +69,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 self.ptr_ty.const_null()
             } else {
                 let mut field_ptrs = Vec::new();
-                for f in fields {
+                for (f, _) in fields {
                     field_ptrs.push(self.make_global_str(f).into());
                 }
                 let array_ty = self.ptr_ty.array_type(fields.len() as u32);
@@ -78,12 +80,26 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 array_global.as_pointer_value()
             };
 
+            let drop_fn_val = if let Some(drop_fn_func) = self.drop_fns.get(class_name) {
+                drop_fn_func.as_global_value().as_pointer_value()
+            } else {
+                self.ptr_ty.const_null()
+            };
+
+            let trace_fn_val = if let Some(trace_fn_func) = self.trace_fns.get(class_name) {
+                trace_fn_func.as_global_value().as_pointer_value()
+            } else {
+                self.ptr_ty.const_null()
+            };
+
             let mut vals = vec![
                 parent_val.into(),
                 name_val.into(),
                 shape_val.into(),
                 fields_count_val.into(),
                 field_names_array_val.into(),
+                drop_fn_val.into(),
+                trace_fn_val.into(),
             ];
 
             for m_name in &method_names {

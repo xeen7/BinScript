@@ -1,10 +1,9 @@
 //! Runtime stubs for BinScript compiled binaries.
 //!
-//! In Stage 2, runtime helpers contain memory allocation, zero-initialization,
-//! and prototype inheritance verification stubs.
+//! Memory model: four-layer hybrid (Stack, Arena, Owned, CIRC).
+//! All objects are Shared(CIRC) in Phase 1 — optimisations come later.
 
-pub mod gc;
-pub mod shadow_stack;
+pub mod circ;
 pub mod promise;
 pub mod json;
 pub mod array;
@@ -13,12 +12,47 @@ pub mod string;
 pub mod dynamic_call;
 pub mod exception;
 
+pub fn __bs_init_runtime() {
+    // This function can be called by the startup code or compiler to force
+    // all essential unreferenced C-ABI functions to be linked.
+    let _ = arena::arena_create as *const ();
+    let _ = arena::arena_alloc as *const ();
+    let _ = arena::arena_reset as *const ();
+    let _ = arena::arena_destroy as *const ();
+    let _ = arena::arena_register_dtor as *const ();
+    let _ = raii::scope_guard::__bs_scope_guard_push as *const ();
+    let _ = raii::scope_guard::__bs_scope_guard_cancel as *const ();
+    let _ = raii::scope_guard::__bs_scope_guard_flush_to as *const ();
+    let _ = raii::scope_guard::__bs_scope_guard_flush_all as *const ();
+    let _ = raii::scope_guard::__bs_scope_guard_get_depth as *const ();
+    let _ = raii::scope_guard::__bs_scope_guard_flush_down_to as *const ();
+    let _ = rc_delta::__bs_rc_flush as *const ();
+    let _ = cycle_collector::__bs_cycle_collector_init as *const ();
+    let _ = rc_delta::__bs_rc_inc_deferred as *const ();
+    let _ = rc_delta::__bs_rc_dec_deferred as *const ();
+    let _ = weak_ref::__bs_weakref_new as *const ();
+    let _ = weak_ref::__bs_weakref_deref as *const ();
+    let _ = weak_ref::__bs_weakref_drop as *const ();
+    let _ = finalization::__bs_finalizer_thread_init as *const ();
+    let _ = finalization::__bs_finalization_registry_register as *const ();
+    let _ = finalization::__bs_drain_finalizers as *const ();
+    let _ = verify::__bs_verify_track_alloc as *const ();
+    let _ = verify::__bs_verify_track_free as *const ();
+    let _ = verify::__verify_load as *const ();
+    let _ = verify::__verify_store as *const ();
+    let _ = verify::__bs_verify_check_leaks as *const ();
+    let _ = weak_ref::__bs_WeakRef_new_1 as *const ();
+    let _ = finalization::__bs_FinalizationRegistry_new_1 as *const ();
+}
+
 // Modular subdirectories
 pub mod core;
+pub mod arena;
 pub mod types;
 pub mod objects;
 pub mod system;
 pub mod generators;
+pub mod raii;
 
 // Re-export core module symbols
 pub use core::vtable::{
@@ -27,6 +61,7 @@ pub use core::vtable::{
 };
 pub use core::alloc::{__bs_alloc, __bs_alloc_closure, __bs_alloc_generator};
 pub use core::instanceof::__bs_instanceof;
+pub use arena::*;
 
 // Re-export types module symbols
 pub use types::typeof_rt::__bs_typeof;
@@ -78,14 +113,52 @@ pub use generators::runtime::{
 };
 
 pub fn stub_version() -> &'static str {
-    "0.3.0-stage3"
+    "0.4.0-circ"
 }
 
 /// Dynamic import runtime stub: returns a resolved Promise containing a fresh empty namespace object.
 #[no_mangle]
-pub unsafe extern "C" fn __bs_dynamic_import(_specifier: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_dynamic_import(_specifier: u64) -> u64 {
     let p = crate::promise::__bs_promise_new();
     let obj = __bs_new_object();
     crate::promise::__bs_promise_resolve(p, obj);
     p
 }
+
+// ── GC-era stubs kept as no-ops for backward compatibility ─────────────────
+// These will be removed once the codegen no longer emits them.
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_safepoint_poll() {
+    // No-op: GC has been removed. CIRC handles destruction immediately.
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_write_barrier(_parent: u64, _child: u64) {
+    // No-op: no generational GC.
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_shadow_push(_frame: *mut u8) {
+    // No-op: shadow stack has been removed.
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_shadow_pop() {
+    // No-op: shadow stack has been removed.
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_shadow_set(_top_ptr: *mut u8) {
+    // No-op: shadow stack has been removed.
+}
+pub mod slab;
+pub mod rc_delta;
+pub mod cycle_buffer;
+pub mod cycle_collector;
+pub mod weak_ref;
+pub mod finalization;
+pub mod verify;
+
+#[cfg(test)]
+pub mod tests;

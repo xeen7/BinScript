@@ -28,6 +28,33 @@ impl<'a> LowerCtx<'a> {
                         }
                     }
                 }
+                if name == "__bs_mock_push" {
+                    if let Some(MirOperand::Reg(r)) = mir_args.get(0) {
+                        self.emit(MirInstr::ScopeGuardPush {
+                            scope_id: 1,
+                            reg: *r,
+                            release_fn: "__bs_mock_release".to_string(),
+                        });
+                        return Ok(MirOperand::Reg(dest));
+                    }
+                }
+                if name == "__bs_mock_cancel" {
+                    if let Some(MirOperand::Reg(r)) = mir_args.get(0) {
+                        self.emit(MirInstr::ScopeGuardCancel {
+                            scope_id: 1,
+                            reg: *r,
+                        });
+                        return Ok(MirOperand::Reg(dest));
+                    }
+                }
+                if name == "__bs_mock_flush" {
+                    self.emit(MirInstr::ScopeGuardFlushTo {
+                        current_scope: 1,
+                        target_scope: 0,
+                    });
+                    return Ok(MirOperand::Reg(dest));
+                }
+
                 let fn_name = if name == "parseInt" {
                     if mir_args.len() == 1 {
                         "__bs_parseInt_1".to_string()

@@ -9,6 +9,7 @@ members = [
     "crates/module-graph",
     "rt-stubs",
     "crates/incremental",
+    "crates/ownership-inference", "scratch/test_ast",
 ]
 resolver = "2"
 
@@ -43,6 +44,6 @@ sha2 = "0.10"
 opt-level = "z"
 lto = "fat"
 codegen-units = 1
-panic = "abort"
+
 strip = "symbols"
 

@@ -6,7 +6,7 @@ use sonic_rs::{JsonValueTrait, JsonContainerTrait};
 
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_spread(target_tagged: u64, source_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_spread(target_tagged: u64, source_tagged: u64) -> u64 {
     let target_tag = target_tagged & 0xFFFF_0000_0000_0000;
     if target_tag != 0xFFF6_0000_0000_0000 {
         return target_tagged;
@@ -34,8 +34,9 @@ pub unsafe extern "C" fn __bs_object_spread(target_tagged: u64, source_tagged: u
                         if !name_ptr.is_null() {
                             let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const libc::c_char);
                             if let Ok(name_str) = name_cstr.to_str() {
-                                let val = *(src_ptr as *const u64).add(1 + i);
-                                set_dynamic_property(target_ptr, name_str.to_string(), val);
+                                let val = *(src_ptr as *const u64).add(2 + i);
+                                let props_slot = unsafe { target_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+                                crate::objects::dynamic_props::set_inline_property(props_slot, name_str.to_string(), val);
                             }
                         }
                     }
@@ -44,16 +45,18 @@ pub unsafe extern "C" fn __bs_object_spread(target_tagged: u64, source_tagged: u
             
             // 2. Copy dynamic properties of source
             let props: Vec<(String, u64)> = {
-                let map = DYNAMIC_PROPERTIES.lock().unwrap();
-                if let Some(obj_entry) = map.get(&(src_payload as usize)) {
-                    obj_entry.iter().map(|(k, &v)| (k.clone(), v)).collect()
+                let src_props_slot = unsafe { src_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+                if !unsafe { *src_props_slot }.is_null() {
+                    let map = unsafe { &**src_props_slot };
+                    map.iter().map(|(k, &v)| (k.clone(), v)).collect()
                 } else {
                     Vec::new()
                 }
             };
+            let tgt_props_slot = unsafe { target_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
             for (k, v) in props {
                 if k != "__proto__" {
-                    set_dynamic_property(target_ptr, k, v);
+                    crate::objects::dynamic_props::set_inline_property(tgt_props_slot, k, v);
                 }
             }
         }
@@ -75,7 +78,8 @@ pub unsafe extern "C" fn __bs_object_spread(target_tagged: u64, source_tagged: u
                 if let Some(obj) = val.as_object() {
                     for (k, v) in obj.iter() {
                         let val_tagged = sonic_value_to_tagged(v);
-                        set_dynamic_property(target_ptr, k.to_string(), val_tagged);
+                        let tgt_props_slot = unsafe { target_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+                        crate::objects::dynamic_props::set_inline_property(tgt_props_slot, k.to_string(), val_tagged);
                     }
                 }
             }
@@ -88,7 +92,7 @@ pub unsafe extern "C" fn __bs_object_spread(target_tagged: u64, source_tagged: u
 unsafe fn sonic_value_to_tagged(field: &sonic_rs::Value) -> u64 {
     if field.is_number() {
         let num = field.as_f64().unwrap_or(0.0);
-        crate::gc::box_number(num)
+        crate::circ::box_number(num)
     } else if field.is_str() {
         if let Some(s) = field.as_str() {
             create_tagged_string(s)

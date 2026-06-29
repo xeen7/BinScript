@@ -17,6 +17,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             MirInstr::Branch(cond, t, f) => {
                 let cv_val = self.val(cond)?;
     let cv = self.nan.is_truthy(&self.builder, cv_val);
+    self.flush_deferred_clears();
     let tbb = self.bbs[t];
     let fbb = self.bbs[f];
     self.builder.build_conditional_branch(cv, tbb, fbb).unwrap();

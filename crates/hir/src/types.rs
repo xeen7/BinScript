@@ -206,6 +206,13 @@ pub enum HirStmt {
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum HirType {
+    Primitive, // number, string, boolean
+    Object(String), // Reference to another class
+    Any, // any, unknown, or missing annotation
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HirMethod {
     pub name: String,
     pub func_id: FuncId,
@@ -215,7 +222,7 @@ pub struct HirMethod {
 pub struct HirClass {
     pub name: String,
     pub super_name: Option<String>,
-    pub fields: Vec<String>,
+    pub fields: Vec<(String, HirType)>,
     pub methods: Vec<HirMethod>,
     pub getters: Vec<String>,
     pub setters: Vec<String>,

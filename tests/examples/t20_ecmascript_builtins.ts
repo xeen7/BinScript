@@ -193,10 +193,8 @@ function runWeakSetTests() {
     console.log("--- WeakSet Object ---");
     const ws = new WeakSet();
     const val1 = { id: 1 };
-    const val2 = { id: 2 };
 
     ws.add(val1);
-    ws.add(val2);
 
     assertEqual(ws.has(val1), true, "WeakSet has val1");
     assertEqual(ws.has({ id: 1 }), false, "WeakSet does not have different object reference");

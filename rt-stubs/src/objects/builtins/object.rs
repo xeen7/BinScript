@@ -5,27 +5,28 @@ use crate::types::string_utils::{get_c_string_from_tagged, create_tagged_string}
 use crate::objects::dynamic_props::{DYNAMIC_PROPERTIES, set_dynamic_property, get_dynamic_property};
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_new_object() -> u64 {
-    __bs_alloc(&OBJECT_VTABLE, 8)
+pub unsafe extern "C-unwind" fn __bs_new_object() -> u64 {
+    let obj = __bs_alloc(&OBJECT_VTABLE, 16);
+    obj
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Object_new(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Object_new(val: u64) -> u64 {
     __bs_Object(val)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Object_new_0() -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Object_new_0() -> u64 {
     __bs_new_object()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Object_new_1(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Object_new_1(val: u64) -> u64 {
     __bs_Object(val)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_keys(obj: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_keys(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
     if tag == 0xFFF6_0000_0000_0000 {
@@ -50,9 +51,10 @@ pub unsafe extern "C" fn __bs_object_keys(obj: u64) -> u64 {
                     }
                 }
             }
-            let map = DYNAMIC_PROPERTIES.lock().unwrap();
-            if let Some(obj_entry) = map.get(&(obj_ptr as usize)) {
-                let mut dkeys: Vec<_> = obj_entry.keys().cloned().collect();
+            let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+            if !unsafe { *props_slot }.is_null() {
+                let map = unsafe { &**props_slot };
+                let mut dkeys: Vec<_> = map.keys().cloned().collect();
                 dkeys.sort();
                 for k in dkeys {
                     if k != "[[PrimitiveValue]]" && !k.starts_with("__") {
@@ -67,7 +69,7 @@ pub unsafe extern "C" fn __bs_object_keys(obj: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_rest(obj: u64, excluded_arr: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_rest(obj: u64, excluded_arr: u64) -> u64 {
     let new_obj = __bs_new_object();
     let new_payload = new_obj & 0x0000_FFFF_FFFF_FFFF;
     
@@ -104,7 +106,7 @@ pub unsafe extern "C" fn __bs_object_rest(obj: u64, excluded_arr: u64) -> u64 {
                             let name_str = name_cstr.to_str().unwrap_or("");
                             if !name_str.starts_with("__") && name_str != "[[PrimitiveValue]]" {
                                 if !excluded_keys.contains(&name_str.to_string()) {
-                                    let field_slot = (obj_ptr as *const u64).add(1 + i);
+                                    let field_slot = (obj_ptr as *const u64).add(2 + i);
                                     let val = *field_slot;
                                     props_to_copy.push((name_str.to_string(), val));
                                 }
@@ -115,9 +117,10 @@ pub unsafe extern "C" fn __bs_object_rest(obj: u64, excluded_arr: u64) -> u64 {
             }
             
             {
-                let map = DYNAMIC_PROPERTIES.lock().unwrap();
-                if let Some(obj_entry) = map.get(&(obj_ptr as usize)) {
-                    for (k, &val) in obj_entry.iter() {
+                let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+                if !unsafe { *props_slot }.is_null() {
+                    let map = unsafe { &**props_slot };
+                    for (k, &val) in map.iter() {
                         if k != "[[PrimitiveValue]]" && !k.starts_with("__") {
                             if !excluded_keys.contains(k) {
                                 props_to_copy.push((k.clone(), val));
@@ -130,14 +133,15 @@ pub unsafe extern "C" fn __bs_object_rest(obj: u64, excluded_arr: u64) -> u64 {
     }
 
     for (k, val) in props_to_copy {
-        set_dynamic_property(new_payload as *mut u8, k, val);
+        let tgt_props_slot = unsafe { (new_payload as *mut u8).add(8) as *mut *mut std::collections::HashMap<String, u64> };
+        crate::objects::dynamic_props::set_inline_property(tgt_props_slot, k, val);
     }
     
     new_obj
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_values(obj: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_values(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
     if tag == 0xFFF6_0000_0000_0000 {
@@ -162,13 +166,14 @@ pub unsafe extern "C" fn __bs_object_values(obj: u64) -> u64 {
                     }
                 }
             }
-            let map = DYNAMIC_PROPERTIES.lock().unwrap();
-            if let Some(obj_entry) = map.get(&(obj_ptr as usize)) {
-                let mut dkeys: Vec<_> = obj_entry.keys().cloned().collect();
+            let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+            if !unsafe { *props_slot }.is_null() {
+                let map = unsafe { &**props_slot };
+                let mut dkeys: Vec<_> = map.keys().cloned().collect();
                 dkeys.sort();
                 for k in dkeys {
                     if k != "[[PrimitiveValue]]" && !k.starts_with("__") {
-                        let v = *obj_entry.get(&k).unwrap();
+                        let v = *map.get(&k).unwrap();
                         crate::array::__bs_array_push(array, v);
                     }
                 }
@@ -179,7 +184,7 @@ pub unsafe extern "C" fn __bs_object_values(obj: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_entries(obj: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_entries(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
     if tag == 0xFFF6_0000_0000_0000 {
@@ -191,6 +196,7 @@ pub unsafe extern "C" fn __bs_object_entries(obj: u64) -> u64 {
                 crate::array::__bs_array_push(entry, create_tagged_string(k));
                 crate::array::__bs_array_push(entry, v);
                 crate::array::__bs_array_push(arr, entry);
+                crate::circ::circ_dec_tagged(entry);
             };
             let vtable_ptr = *(obj_ptr as *const *const VTable);
             if !vtable_ptr.is_null() {
@@ -210,13 +216,14 @@ pub unsafe extern "C" fn __bs_object_entries(obj: u64) -> u64 {
                     }
                 }
             }
-            let map = DYNAMIC_PROPERTIES.lock().unwrap();
-            if let Some(obj_entry) = map.get(&(obj_ptr as usize)) {
-                let mut dkeys: Vec<_> = obj_entry.keys().cloned().collect();
+            let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+            if !unsafe { *props_slot }.is_null() {
+                let map = unsafe { &**props_slot };
+                let mut dkeys: Vec<_> = map.keys().cloned().collect();
                 dkeys.sort();
                 for k in dkeys {
                     if k != "[[PrimitiveValue]]" && !k.starts_with("__") {
-                        let v = *obj_entry.get(&k).unwrap();
+                        let v = *map.get(&k).unwrap();
                         push_entry(array, &k, v);
                     }
                 }
@@ -227,7 +234,7 @@ pub unsafe extern "C" fn __bs_object_entries(obj: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_assign(target: u64, source: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_assign(target: u64, source: u64) -> u64 {
     let target_tag = target & 0xFFFF_0000_0000_0000;
     let source_tag = source & 0xFFFF_0000_0000_0000;
     if target_tag == 0xFFF6_0000_0000_0000 {
@@ -247,30 +254,31 @@ pub unsafe extern "C" fn __bs_object_assign(target: u64, source: u64) -> u64 {
                             let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const libc::c_char);
                             let name_str = name_cstr.to_str().unwrap_or("");
                             if !name_str.starts_with("__") && name_str != "[[PrimitiveValue]]" {
-                                let val_ptr = (source_ptr as *const u64).add(1 + i);
+                                let val_ptr = (source_ptr as *const u64).add(2 + i);
                                 crate::json::tape::__bs_prop_set(target, name_ptr, name_str.len() as u32, *val_ptr);
                             }
                         }
                     }
                 }
             }
-            let map = DYNAMIC_PROPERTIES.lock().unwrap();
-            if let Some(obj_entry) = map.get(&(source_ptr as usize)) {
-                let copy_list: Vec<(String, u64)> = obj_entry.iter().map(|(k, v)| (k.clone(), *v)).collect();
-                drop(map);
-                for (k, v) in copy_list {
+            let props_slot = unsafe { source_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+            if !unsafe { *props_slot }.is_null() {
+                let map = unsafe { &**props_slot };
+                for (k, &val) in map.iter() {
                     if k != "[[PrimitiveValue]]" && !k.starts_with("__") {
-                        set_dynamic_property(target_ptr, k, v);
+                        let k_cstr = std::ffi::CString::new(k.clone()).unwrap();
+                        crate::json::tape::__bs_prop_set(target, k_cstr.as_ptr() as *const u8, k.len() as u32, val);
                     }
                 }
             }
         }
     }
+    crate::circ::circ_inc_tagged(target);
     target
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_create(proto: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_create(proto: u64) -> u64 {
     let obj = __bs_new_object();
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
     set_dynamic_property(payload as *mut u8, "__proto__".to_string(), proto);
@@ -278,12 +286,13 @@ pub unsafe extern "C" fn __bs_object_create(proto: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_getPrototypeOf(obj: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_object_getPrototypeOf(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF6_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         if let Some(proto) = get_dynamic_property(obj_ptr, "__proto__") {
+            crate::circ::circ_inc_tagged(proto);
             return proto;
         }
     }
@@ -291,8 +300,8 @@ pub unsafe extern "C" fn __bs_object_getPrototypeOf(obj: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_object_fromEntries(pairs: u64) -> u64 {
-    let obj = __bs_alloc(&OBJECT_VTABLE, 8);
+pub unsafe extern "C-unwind" fn __bs_object_fromEntries(pairs: u64) -> u64 {
+    let obj = __bs_alloc(&OBJECT_VTABLE, 16);
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
     
     let tag = pairs & 0xFFFF_0000_0000_0000;
@@ -324,9 +333,17 @@ pub unsafe extern "C" fn __bs_object_fromEntries(pairs: u64) -> u64 {
 static mut GLOBAL_THIS_OBJ: u64 = 0;
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_get_globalThis() -> u64 {
+pub unsafe extern "C-unwind" fn __bs_get_globalThis() -> u64 {
     if GLOBAL_THIS_OBJ == 0 {
-        GLOBAL_THIS_OBJ = __bs_alloc(&OBJECT_VTABLE, 8);
+        GLOBAL_THIS_OBJ = __bs_alloc(&OBJECT_VTABLE, 16);
     }
     GLOBAL_THIS_OBJ
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_cleanup_global_this() {
+    if GLOBAL_THIS_OBJ != 0 {
+        crate::circ::circ_dec_tagged(GLOBAL_THIS_OBJ);
+        GLOBAL_THIS_OBJ = 0;
+    }
 }

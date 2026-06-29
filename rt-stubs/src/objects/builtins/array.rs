@@ -1,7 +1,7 @@
 
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Array_new(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Array_new(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF1_0000_0000_0000 {
         crate::array::__bs_array_new()

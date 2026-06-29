@@ -51,7 +51,7 @@ impl<'a> LowerCtx<'a> {
         }
 
         // Fallback to dynamic property set
-        self.emit(MirInstr::StoreProp(obj_reg, property.to_string(), val.clone()));
+        self.emit(MirInstr::StoreProp(obj_reg, property.to_string(), val.clone(), false));
         Ok(val)
     }
 }

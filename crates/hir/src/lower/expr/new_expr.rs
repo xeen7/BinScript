@@ -169,6 +169,28 @@ impl LowerCtx {
                     });
                 }
             }
+            if class_name == "WeakRef" {
+                let arg = if args.is_empty() {
+                    HirExpr::Lit(Literal::Undefined)
+                } else {
+                    args[0].clone()
+                };
+                return Ok(HirExpr::Call {
+                    callee: Box::new(HirExpr::GlobalRef("__bs_WeakRef_new_1".to_string())),
+                    args: vec![arg],
+                });
+            }
+            if class_name == "FinalizationRegistry" {
+                let arg = if args.is_empty() {
+                    HirExpr::Lit(Literal::Undefined)
+                } else {
+                    args[0].clone()
+                };
+                return Ok(HirExpr::Call {
+                    callee: Box::new(HirExpr::GlobalRef("__bs_FinalizationRegistry_new_1".to_string())),
+                    args: vec![arg],
+                });
+            }
             if class_name == "RegExp" {
                 let pattern = if args.is_empty() {
                     HirExpr::Lit(Literal::String("".to_string()))

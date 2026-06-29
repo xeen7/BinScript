@@ -1,4 +1,3 @@
-use crate::gc;
 use crate::dynamic_call::helpers::{TAG_MASK, TAG_OBJECT, PAYLOAD_MASK};
 
 pub struct DateComponents {
@@ -97,7 +96,7 @@ pub fn date_to_string(ms: f64) -> String {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_getTime(recv: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_getTime(recv: u64) -> u64 {
     let tag = recv & TAG_MASK;
     if tag == TAG_OBJECT {
         let payload = recv & PAYLOAD_MASK;
@@ -106,41 +105,41 @@ pub unsafe extern "C" fn __bs_date_getTime(recv: u64) -> u64 {
             return prim;
         }
     }
-    gc::box_number(0.0)
+    crate::circ::box_number(0.0)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_getFullYear(recv: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_getFullYear(recv: u64) -> u64 {
     let ms = f64::from_bits(__bs_date_getTime(recv));
-    gc::box_number(ms_to_components(ms).year as f64)
+    crate::circ::box_number(ms_to_components(ms).year as f64)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_getMonth(recv: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_getMonth(recv: u64) -> u64 {
     let ms = f64::from_bits(__bs_date_getTime(recv));
-    gc::box_number(ms_to_components(ms).month as f64)
+    crate::circ::box_number(ms_to_components(ms).month as f64)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_getDate(recv: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_getDate(recv: u64) -> u64 {
     let ms = f64::from_bits(__bs_date_getTime(recv));
-    gc::box_number(ms_to_components(ms).date as f64)
+    crate::circ::box_number(ms_to_components(ms).date as f64)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_getHours(recv: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_getHours(recv: u64) -> u64 {
     let ms = f64::from_bits(__bs_date_getTime(recv));
-    gc::box_number(ms_to_components(ms).hours as f64)
+    crate::circ::box_number(ms_to_components(ms).hours as f64)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_getMinutes(recv: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_getMinutes(recv: u64) -> u64 {
     let ms = f64::from_bits(__bs_date_getTime(recv));
-    gc::box_number(ms_to_components(ms).minutes as f64)
+    crate::circ::box_number(ms_to_components(ms).minutes as f64)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_date_getSeconds(recv: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_date_getSeconds(recv: u64) -> u64 {
     let ms = f64::from_bits(__bs_date_getTime(recv));
-    gc::box_number(ms_to_components(ms).seconds as f64)
+    crate::circ::box_number(ms_to_components(ms).seconds as f64)
 }

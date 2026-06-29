@@ -1,7 +1,7 @@
 use super::string_utils::create_tagged_string;
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_typeof(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_typeof(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     let s = if tag == 0xFFF1_0000_0000_0000 {
         "undefined"

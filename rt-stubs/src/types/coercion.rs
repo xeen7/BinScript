@@ -1,4 +1,3 @@
-use crate::gc;
 use super::string_utils::{get_c_string_from_tagged, create_tagged_string};
 use crate::core::vtable::VTable;
 
@@ -8,7 +7,7 @@ use crate::objects::builtins::{
 };
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_String(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_String(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF1_0000_0000_0000 {
         create_tagged_string("undefined")
@@ -51,7 +50,7 @@ pub unsafe extern "C" fn __bs_String(val: u64) -> u64 {
         let len = f64::from_bits(len_boxed) as usize;
         let mut parts = Vec::new();
         for i in 0..len {
-            let elem = crate::array::__bs_array_get(val, gc::box_number(i as f64));
+            let elem = crate::array::__bs_array_get(val, crate::circ::box_number(i as f64));
             let s_elem_tagged = __bs_String(elem);
             let s_elem = get_c_string_from_tagged(s_elem_tagged);
             parts.push(s_elem.to_string());
@@ -73,7 +72,7 @@ pub unsafe extern "C" fn __bs_String(val: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Number(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Number(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     let num = if tag == 0xFFF1_0000_0000_0000 {
         f64::NAN
@@ -107,11 +106,11 @@ pub unsafe extern "C" fn __bs_Number(val: u64) -> u64 {
     } else {
         return val;
     };
-    gc::box_number(num)
+    crate::circ::box_number(num)
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Boolean(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Boolean(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     let b = if tag == 0xFFF1_0000_0000_0000 {
         false
@@ -136,7 +135,7 @@ pub unsafe extern "C" fn __bs_Boolean(val: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Object(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Object(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF1_0000_0000_0000 || tag == 0xFFF2_0000_0000_0000 {
         __bs_new_object()
@@ -152,7 +151,7 @@ pub unsafe extern "C" fn __bs_Object(val: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_Date(_val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_Date(_val: u64) -> u64 {
     let now = std::time::SystemTime::now();
     let since_the_epoch = now.duration_since(std::time::UNIX_EPOCH).expect("Time went backwards");
     let ms = since_the_epoch.as_millis() as f64;

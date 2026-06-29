@@ -10,22 +10,45 @@ use diagnostics::{CompileError, CompileResult};
 use crate::codegen::LlvmCodegen;
 
 impl<'ctx> LlvmCodegen<'ctx> {
-    #[allow(unreachable_code)]
-    #[allow(unused_variables)]
     pub(in crate::codegen::instr) fn emit_instr_try_enter(&mut self, instr: &MirInstr) -> CompileResult<()> {
-        match instr {
-            MirInstr::TryEnter(jmp_buf_reg) => {
-                let jmp_buf_ty = self.i8_ty.array_type(256);
-    let jmp_buf_alloca = self.builder.build_alloca(jmp_buf_ty, "jmp_buf").unwrap();
-    let jmp_buf_int = self.builder.build_ptr_to_int(jmp_buf_alloca, self.i64_ty, "jmp_buf_int").unwrap();
-    self.store(*jmp_buf_reg, jmp_buf_int);
+        if let MirInstr::TryEnter { scope_id, catch_target } = instr {
+            let pers_fn = self.module.get_function("__bs_personality_v0").unwrap_or_else(|| {
+                let ty = self.i32_ty.fn_type(&[], true);
+                self.module.add_function("__bs_personality_v0", ty, None)
+            });
+            let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
+            current_fn.set_personality_function(pers_fn);
 
-    let try_enter_fn = self.module.get_function("__bs_try_enter").unwrap();
-    let ptr_val = self.builder.build_int_to_ptr(jmp_buf_int, self.ptr_ty, "jmp_buf_ptr").unwrap();
-    self.builder.build_call(try_enter_fn, &[ptr_val.into()], "").unwrap();
+            let catch_bb = self.bbs[catch_target];
+            self.exception_scope_stack.push((*scope_id, catch_bb));
+
+            if self.gen_state_ptr.is_none() {
+                // Zero-cost path: save the current RAII push counter as a
+                // compile-time constant. The catch LP will only clean up slots
+                // with index >= this value (i.e., objects pushed inside the try body).
+                self.catch_raii_indices.insert(catch_bb, self.raii_push_counter);
+            } else {
+                // Generator fallback: save runtime GUARD_STACK depth
+                let get_len_fn = self.module.get_function("__bs_scope_guard_get_len").unwrap_or_else(|| {
+                    self.module.add_function("__bs_scope_guard_get_len", self.i32_ty.fn_type(&[], false), None)
+                });
+                let depth_val = self.builder.build_call(get_len_fn, &[], "catch_depth_val").unwrap().try_as_basic_value().basic().unwrap().into_int_value();
+                
+                let current_bb = self.builder.get_insert_block().unwrap();
+                let entry_bb = current_fn.get_first_basic_block().unwrap();
+                if let Some(first_instr) = entry_bb.get_first_instruction() {
+                    self.builder.position_before(&first_instr);
+                } else {
+                    self.builder.position_at_end(entry_bb);
+                }
+                let depth_ptr = self.builder.build_alloca(self.i32_ty, "catch_depth_ptr").unwrap();
+                
+                self.builder.position_at_end(current_bb);
+                self.builder.build_store(depth_ptr, depth_val).unwrap();
+                
+                // For generators, store the depth pointer for the runtime flush path
+                // (landing_pad.rs will need to handle this via a separate mechanism)
             }
-
-            _ => unreachable!()
         }
         Ok(())
     }

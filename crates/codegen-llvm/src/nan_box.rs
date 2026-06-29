@@ -109,6 +109,27 @@ impl<'ctx> NanBoxHelper<'ctx> {
 
     // ── type checks ────────────────────────────────────────────────────────
 
+    pub fn is_heap_pointer(&self, builder: &Builder<'ctx>, v: IntValue<'ctx>) -> IntValue<'ctx> {
+        let shifted = builder
+            .build_right_shift(v, self.i64_ty.const_int(48, false), false, "t16")
+            .unwrap();
+        let tag_obj = self.i64_ty.const_int(0xFFF6, false);
+        let is_obj = builder.build_int_compare(IntPredicate::EQ, shifted, tag_obj, "is_obj").unwrap();
+        
+        let tag_closure = self.i64_ty.const_int(0xFFF9, false);
+        let is_closure = builder.build_int_compare(IntPredicate::EQ, shifted, tag_closure, "is_closure").unwrap();
+
+        let tag_gen = self.i64_ty.const_int(0xFFFA, false);
+        let is_gen = builder.build_int_compare(IntPredicate::EQ, shifted, tag_gen, "is_gen").unwrap();
+        
+        let tag_array = self.i64_ty.const_int(0xFFFB, false);
+        let is_array = builder.build_int_compare(IntPredicate::EQ, shifted, tag_array, "is_array").unwrap();
+        
+        let is_obj_or_closure = builder.build_or(is_obj, is_closure, "is_obj_or_closure").unwrap();
+        let is_gen_or_array = builder.build_or(is_gen, is_array, "is_gen_or_array").unwrap();
+        builder.build_or(is_obj_or_closure, is_gen_or_array, "is_heap_ptr").unwrap()
+    }
+
     /// Returns an `i1` that is true when `v` is a plain f64 number
     /// (i.e. upper 16 bits < TAG_MIN).
     #[allow(dead_code)]

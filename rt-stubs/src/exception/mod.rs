@@ -1,67 +1,69 @@
 //! Runtime exception handling and error object constructors.
 
+pub mod personality;
+
 use std::cell::RefCell;
 
-struct TryEntry {
-    jmp_buf: *mut libc::c_void,
-    shadow_stack_top: *mut crate::shadow_stack::ShadowFrame,
+#[repr(C)]
+pub struct _Unwind_Exception {
+    pub exception_class: u64,
+    pub exception_cleanup: Option<extern "C-unwind" fn(u32, *mut _Unwind_Exception)>,
+    pub private_1: u64,
+    pub private_2: u64,
 }
 
-thread_local! {
-    static TRY_STACK: RefCell<Vec<TryEntry>> = RefCell::new(Vec::new());
-    static CURRENT_EXCEPTION: RefCell<u64> = RefCell::new(0);
+#[repr(C)]
+pub struct BinScriptException {
+    pub unwind_header: _Unwind_Exception,
+    pub value: u64,
+}
+
+extern "C-unwind" {
+    fn _Unwind_RaiseException(exception_object: *mut _Unwind_Exception) -> u32;
+}
+
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_throw(value: u64) {
+    // Allocate enough memory for BinScriptException
+    // We allocate on the heap so it lives during unwinding.
+    // Use BinScript exception class: "BinScr\x70\x74"
+    let bs_ex_box = Box::new(BinScriptException {
+        unwind_header: _Unwind_Exception {
+            exception_class: 0x42696E5363727074,
+            exception_cleanup: None,
+            private_1: 0,
+            private_2: 0,
+        },
+        value,
+    });
+    let exn_ptr = Box::into_raw(bs_ex_box) as *mut _Unwind_Exception;
+
+    let res = _Unwind_RaiseException(exn_ptr);
+    libc::printf("Unwind failed\n\0".as_ptr() as *const i8);
+    std::process::abort();
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_try_enter(jmp_buf: *mut libc::c_void) {
-    let shadow_top = crate::shadow_stack::get_shadow_stack_top();
-    TRY_STACK.with(|stack| {
-        stack.borrow_mut().push(TryEntry {
-            jmp_buf,
-            shadow_stack_top: shadow_top,
-        });
-    });
+pub unsafe extern "C-unwind" fn __bs_free_exception(exception_object: *mut _Unwind_Exception) {
+    // The value's ownership was transferred to the catch block via __bs_get_exception_value,
+    // so we only deallocate the wrapper.
+    let layout = std::alloc::Layout::new::<BinScriptException>();
+    std::alloc::dealloc(exception_object as *mut u8, layout);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_try_exit() {
-    TRY_STACK.with(|stack| {
-        stack.borrow_mut().pop();
-    });
+pub unsafe extern "C-unwind" fn __bs_get_exception_value(exception_object: *mut _Unwind_Exception) -> u64 {
+    // We embedded the BinScriptException value in the exception object
+    let bs_ex = exception_object as *mut BinScriptException;
+    (*bs_ex).value
 }
 
-extern "C" {
-    pub fn _longjmp(env: *mut libc::c_void, val: libc::c_int) -> !;
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn __bs_throw(value: u64) -> ! {
-    let top = TRY_STACK.with(|stack| {
-        stack.borrow_mut().pop()
-    });
-
-    if let Some(entry) = top {
-        // Restore shadow stack to the state it was at try-enter,
-        // discarding dangling frames from functions unwound by longjmp.
-        crate::shadow_stack::__bs_shadow_set(entry.shadow_stack_top);
-
-        CURRENT_EXCEPTION.with(|ex| {
-            *ex.borrow_mut() = value;
-        });
-        _longjmp(entry.jmp_buf, 1);
-    } else {
-        print_exception(value);
-        std::process::exit(1);
+extern "C-unwind" fn exception_cleanup_fn(_reason: u32, exn_ptr: *mut _Unwind_Exception) {
+    unsafe {
+        let layout = std::alloc::Layout::new::<BinScriptException>();
+        std::alloc::dealloc(exn_ptr as *mut u8, layout);
     }
-}
-
-#[no_mangle]
-pub unsafe extern "C" fn __bs_get_and_clear_exception() -> u64 {
-    CURRENT_EXCEPTION.with(|ex| {
-        let val = *ex.borrow();
-        *ex.borrow_mut() = 0;
-        val
-    })
 }
 
 unsafe fn print_exception(val: u64) {
@@ -97,3 +99,26 @@ unsafe fn print_exception(val: u64) {
         eprintln!("Unhandled Exception: {:X}", val);
     }
 }
+
+#[allow(non_camel_case_types)]
+type _Unwind_Reason_Code = u32;
+#[allow(non_camel_case_types)]
+type _Unwind_Action = u32;
+
+const _URC_NO_REASON: _Unwind_Reason_Code = 0;
+const _URC_FOREIGN_EXCEPTION_CAUGHT: _Unwind_Reason_Code = 1;
+const _URC_FATAL_PHASE2_ERROR: _Unwind_Reason_Code = 2;
+const _URC_FATAL_PHASE1_ERROR: _Unwind_Reason_Code = 3;
+const _URC_NORMAL_STOP: _Unwind_Reason_Code = 4;
+const _URC_END_OF_STACK: _Unwind_Reason_Code = 5;
+const _URC_HANDLER_FOUND: _Unwind_Reason_Code = 6;
+const _URC_INSTALL_CONTEXT: _Unwind_Reason_Code = 7;
+const _URC_CONTINUE_UNWIND: _Unwind_Reason_Code = 8;
+
+const _UA_SEARCH_PHASE: _Unwind_Action = 1;
+const _UA_CLEANUP_PHASE: _Unwind_Action = 2;
+const _UA_HANDLER_FRAME: _Unwind_Action = 4;
+const _UA_FORCE_UNWIND: _Unwind_Action = 8;
+const _UA_END_OF_STACK: _Unwind_Action = 16;
+
+

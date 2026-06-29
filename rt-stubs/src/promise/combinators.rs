@@ -8,7 +8,7 @@ struct AllState {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_promise_all_2(p1_tagged: u64, p2_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_promise_all_2(p1_tagged: u64, p2_tagged: u64) -> u64 {
     let new_promise = __bs_promise_new();
     let state = Arc::new(Mutex::new(AllState {
         resolved_count: 0,
@@ -44,7 +44,7 @@ pub unsafe extern "C" fn __bs_promise_all_2(p1_tagged: u64, p2_tagged: u64) -> u
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_promise_race_2(p1_tagged: u64, p2_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_promise_race_2(p1_tagged: u64, p2_tagged: u64) -> u64 {
     let new_promise = __bs_promise_new();
     let resolved = Arc::new(Mutex::new(false));
 

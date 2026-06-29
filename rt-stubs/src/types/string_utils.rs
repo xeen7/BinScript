@@ -62,7 +62,7 @@ fn decode_uri_str(s: &str) -> Option<String> {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_encodeURI(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_encodeURI(val: u64) -> u64 {
     let s_tagged = crate::types::coercion::__bs_String(val);
     let s = get_c_string_from_tagged(s_tagged);
     let encoded = encode_uri_str(s, false);
@@ -70,19 +70,20 @@ pub unsafe extern "C" fn __bs_encodeURI(val: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_decodeURI(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_decodeURI(val: u64) -> u64 {
     let s_tagged = crate::types::coercion::__bs_String(val);
     let s = get_c_string_from_tagged(s_tagged);
     if let Some(decoded) = decode_uri_str(s) {
         create_tagged_string(&decoded)
     } else {
         let msg = create_tagged_string("URI malformed");
-        crate::exception::__bs_throw(crate::objects::builtins::__bs_URIError_new(msg))
+        crate::exception::__bs_throw(crate::objects::builtins::__bs_URIError_new(msg));
+        0 // Unreachable
     }
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_encodeURIComponent(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_encodeURIComponent(val: u64) -> u64 {
     let s_tagged = crate::types::coercion::__bs_String(val);
     let s = get_c_string_from_tagged(s_tagged);
     let encoded = encode_uri_str(s, true);
@@ -90,13 +91,14 @@ pub unsafe extern "C" fn __bs_encodeURIComponent(val: u64) -> u64 {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_decodeURIComponent(val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_decodeURIComponent(val: u64) -> u64 {
     let s_tagged = crate::types::coercion::__bs_String(val);
     let s = get_c_string_from_tagged(s_tagged);
     if let Some(decoded) = decode_uri_str(s) {
         create_tagged_string(&decoded)
     } else {
         let msg = create_tagged_string("URI malformed");
-        crate::exception::__bs_throw(crate::objects::builtins::__bs_URIError_new(msg))
+        crate::exception::__bs_throw(crate::objects::builtins::__bs_URIError_new(msg));
+        0 // Unreachable
     }
 }

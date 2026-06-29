@@ -8,17 +8,18 @@ use diagnostics::{CompileError, CompileResult};
 
 use crate::codegen::LlvmCodegen;
 
-mod arithmetic;
-mod compare;
-mod logical;
-mod calls;
-mod control_flow;
-mod generators;
-mod objects;
-mod closures;
-mod exceptions;
-mod globals;
-mod memory;
+pub mod arithmetic;
+pub mod compare;
+pub mod logical;
+pub mod calls;
+pub mod control_flow;
+pub mod generators;
+pub mod objects;
+pub mod closures;
+pub mod exceptions;
+pub mod globals;
+pub mod memory;
+pub mod raii;
 
 impl<'ctx> LlvmCodegen<'ctx> {
     pub(super) fn emit_instr(&mut self, instr: &MirInstr) -> CompileResult<()> {
@@ -58,12 +59,30 @@ impl<'ctx> LlvmCodegen<'ctx> {
             MirInstr::Return(..) => self.emit_instr_return_op(instr)?,
             MirInstr::Suspend(..) => self.emit_instr_suspend(instr)?,
             MirInstr::Resume(..) => self.emit_instr_resume(instr)?,
-            MirInstr::TryEnter(..) => self.emit_instr_try_enter(instr)?,
-            MirInstr::SetJmp(..) => self.emit_instr_set_jmp(instr)?,
+            MirInstr::TryEnter { .. } => self.emit_instr_try_enter(instr)?,
             MirInstr::TryExit => self.emit_instr_try_exit(instr)?,
             MirInstr::Throw(..) => self.emit_instr_throw(instr)?,
+            MirInstr::Rethrow(..) => self.emit_instr_rethrow(instr)?,
+            MirInstr::LandingPad { .. } => self.emit_instr_landing_pad(instr)?,
+            MirInstr::ExtractException { .. } => self.emit_instr_extract_exception(instr)?,
             MirInstr::LoadGlobal(..) => self.emit_instr_load_global(instr)?,
             MirInstr::StoreGlobal(..) => self.emit_instr_store_global(instr)?,
+            MirInstr::AllocShared(..) | MirInstr::AllocAcyclic(..) | MirInstr::AllocSharedAcyclic(..) | MirInstr::AllocOwned(..) | MirInstr::AllocStack(..) | MirInstr::AllocArena(..) => self.emit_instr_alloc_object(instr)?,
+            MirInstr::ArenaCreate(..) => self.emit_instr_arena_create(instr)?,
+            MirInstr::ArenaDestroy(..) => self.emit_instr_arena_destroy(instr)?,
+            MirInstr::RcInc(..) => self.emit_instr_rc_inc(instr)?,
+            MirInstr::RcDec(..) => self.emit_instr_rc_dec(instr)?,
+            MirInstr::RcIncDeferred(..) => self.emit_instr_rc_inc_deferred(instr)?,
+            MirInstr::RcDecDeferred(..) => self.emit_instr_rc_dec_deferred(instr)?,
+            MirInstr::FlushRcDelta => self.emit_instr_flush_rc_delta()?,
+            MirInstr::Drop(..) => self.emit_instr_drop(instr)?,
+            MirInstr::DropStack(..) => self.emit_instr_drop_stack(instr)?,
+            MirInstr::CallDropFnOnly(..) => self.emit_instr_call_drop_fn_only(instr)?,
+            MirInstr::Borrow(..) | MirInstr::BorrowMut(..) => self.emit_instr_borrow(instr)?,
+            MirInstr::StoreSharedField(..) => self.emit_instr_store_shared_field(instr)?,
+            MirInstr::ScopeGuardPush { scope_id, reg, release_fn } => self.emit_instr_scope_guard_push(*scope_id, *reg, release_fn)?,
+            MirInstr::ScopeGuardCancel { scope_id, reg } => self.emit_instr_scope_guard_cancel(*scope_id, *reg)?,
+            MirInstr::ScopeGuardFlushTo { current_scope: _, target_scope } => self.emit_instr_scope_guard_flush_to(*target_scope)?,
         }
         Ok(())
     }

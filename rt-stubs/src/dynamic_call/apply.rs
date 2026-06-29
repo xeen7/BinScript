@@ -1,9 +1,8 @@
-use crate::gc;
 use crate::VTable;
 use crate::dynamic_call::helpers::{TAG_MASK, PAYLOAD_MASK};
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_call_apply(callee: u64, _this_val: u64, args_array: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_call_apply(callee: u64, _this_val: u64, args_array: u64) -> u64 {
     let tag = callee & TAG_MASK;
     if tag != 0xFFF9_0000_0000_0000 {
         panic!("__bs_call_apply: callee is not a closure (tag: {:X})", tag);
@@ -19,45 +18,45 @@ pub unsafe extern "C" fn __bs_call_apply(callee: u64, _this_val: u64, args_array
     let len = f64::from_bits(len_boxed) as usize;
     let mut args = Vec::new();
     for i in 0..len {
-        let idx = gc::box_number(i as f64);
+        let idx = crate::circ::box_number(i as f64);
         args.push(crate::array::__bs_array_get(args_array, idx));
     }
 
     match len {
         0 => {
-            let cb: unsafe extern "C" fn(u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee)
         }
         1 => {
-            let cb: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0])
         }
         2 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0], args[1])
         }
         3 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0], args[1], args[2])
         }
         4 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0], args[1], args[2], args[3])
         }
         5 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0], args[1], args[2], args[3], args[4])
         }
         6 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0], args[1], args[2], args[3], args[4], args[5])
         }
         7 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0], args[1], args[2], args[3], args[4], args[5], args[6])
         }
         8 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(callee, args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
         }
         _ => {
@@ -67,7 +66,7 @@ pub unsafe extern "C" fn __bs_call_apply(callee: u64, _this_val: u64, args_array
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn __bs_vcall_apply(obj: u64, method_idx_val: u64, args_array: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_vcall_apply(obj: u64, method_idx_val: u64, args_array: u64) -> u64 {
     let method_idx = f64::from_bits(method_idx_val) as i32;
     let payload = obj & PAYLOAD_MASK;
     if payload == 0 {
@@ -98,7 +97,7 @@ pub unsafe extern "C" fn __bs_vcall_apply(obj: u64, method_idx_val: u64, args_ar
     let len = f64::from_bits(len_boxed) as usize;
     let mut args = Vec::new();
     for i in 0..len {
-        let idx = gc::box_number(i as f64);
+        let idx = crate::circ::box_number(i as f64);
         args.push(crate::array::__bs_array_get(args_array, idx));
     }
 
@@ -107,39 +106,39 @@ pub unsafe extern "C" fn __bs_vcall_apply(obj: u64, method_idx_val: u64, args_ar
     // args[0] is the receiver `this`, and args[1..] are the subsequent arguments.
     match len {
         1 => {
-            let cb: unsafe extern "C" fn(u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0])
         }
         2 => {
-            let cb: unsafe extern "C" fn(u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1])
         }
         3 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1], args[2])
         }
         4 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1], args[2], args[3])
         }
         5 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1], args[2], args[3], args[4])
         }
         6 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1], args[2], args[3], args[4], args[5])
         }
         7 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1], args[2], args[3], args[4], args[5], args[6])
         }
         8 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7])
         }
         9 => {
-            let cb: unsafe extern "C" fn(u64, u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
+            let cb: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(fn_ptr);
             cb(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8])
         }
         _ => {

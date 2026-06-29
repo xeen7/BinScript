@@ -37,6 +37,7 @@ function* fibonacci(limit: number) {
   let b = 1;
   let count = 0;
   while (count < limit) {
+    console.log("yielding " + a);
     yield a;
     let next = a + b;
     a = b;

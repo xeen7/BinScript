@@ -1,23 +1,22 @@
-use crate::gc;
 use crate::dynamic_call::helpers::{TAG_MASK, TAG_ARRAY, TAG_STRING, TAG_OBJECT, PAYLOAD_MASK};
 
 
 // Wrapper for forEach because it returns void
-pub unsafe extern "C" fn array_for_each_wrapper(arr: u64, cb: u64) -> u64 {
+pub unsafe extern "C-unwind" fn array_for_each_wrapper(arr: u64, cb: u64) -> u64 {
     crate::array::__bs_array_forEach(arr, cb);
     0
 }
 
 // Non-existent string dummy fallback functions for methods only present on arrays
-pub unsafe extern "C" fn dummy_str_0(_: u64) -> u64 { gc::box_number(0.0) }
-pub unsafe extern "C" fn dummy_str_1(_: u64, _: u64) -> u64 { gc::box_number(0.0) }
-pub unsafe extern "C" fn dummy_str_2(_: u64, _: u64, _: u64) -> u64 { gc::box_number(0.0) }
-pub unsafe extern "C" fn dummy_str_3(_: u64, _: u64, _: u64, _: u64) -> u64 { gc::box_number(0.0) }
+pub unsafe extern "C-unwind" fn dummy_str_0(_: u64) -> u64 { crate::circ::box_number(0.0) }
+pub unsafe extern "C-unwind" fn dummy_str_1(_: u64, _: u64) -> u64 { crate::circ::box_number(0.0) }
+pub unsafe extern "C-unwind" fn dummy_str_2(_: u64, _: u64, _: u64) -> u64 { crate::circ::box_number(0.0) }
+pub unsafe extern "C-unwind" fn dummy_str_3(_: u64, _: u64, _: u64, _: u64) -> u64 { crate::circ::box_number(0.0) }
 
 // Non-existent array dummy fallback functions for methods only present on strings
-pub unsafe extern "C" fn dummy_arr_0(_: u64) -> u64 { 0 }
-pub unsafe extern "C" fn dummy_arr_1(_: u64, _: u64) -> u64 { 0 }
-pub unsafe extern "C" fn dummy_arr_2(_: u64, _: u64, _: u64) -> u64 { 0 }
+pub unsafe extern "C-unwind" fn dummy_arr_0(_: u64) -> u64 { 0 }
+pub unsafe extern "C-unwind" fn dummy_arr_1(_: u64, _: u64) -> u64 { 0 }
+pub unsafe extern "C-unwind" fn dummy_arr_2(_: u64, _: u64, _: u64) -> u64 { 0 }
 
 // Array & String Dispatchers
 crate::dispatch_1_arg!(__bs_call_push, "push", crate::array::__bs_array_push, dummy_str_1);
