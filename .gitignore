@@ -8,6 +8,9 @@
 *.log
 *.txt
 *.ll
+*.bc
+*.s
+*.gdb
 *.o
 *.a
 *.mir
