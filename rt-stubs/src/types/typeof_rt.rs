@@ -19,7 +19,7 @@ pub unsafe extern "C-unwind" fn __bs_typeof(val: u64) -> u64 {
         "object" // generator
     } else if tag == 0xFFFB_0000_0000_0000 {
         "object" // array
-    } else if tag == 0xFFFC_0000_0000_0000 {
+    } else if tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFD_0000_0000_0000 {
         "object" // promise
     } else if tag == 0xFFF6_0000_0000_0000 {
         // object or class instance

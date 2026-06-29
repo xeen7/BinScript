@@ -3,7 +3,7 @@ pub mod microtask;
 use crate::promise::microtask::enqueue_microtask;
 use std::sync::Mutex;
 
-pub const TAG_PROMISE: u64 = 0xFFFC_0000_0000_0000;
+pub const TAG_PROMISE: u64 = 0xFFFD_0000_0000_0000;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum PromiseState {

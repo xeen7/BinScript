@@ -101,7 +101,7 @@ pub unsafe extern "C-unwind" fn __bs_drain_finalizers() {
         let closure_slot = registry_obj.add(16) as *mut u64;
         let closure_val = *closure_slot;
         
-        if closure_val & 0xFFF0_0000_0000_0000 == 0xFFF9_0000_0000_0000 {
+        if closure_val & 0xFFFF_0000_0000_0000 == 0xFFF9_0000_0000_0000 {
             let closure_ptr = (closure_val & 0x0000_FFFF_FFFF_FFFF) as *mut u8;
             let func_ptr_slot = closure_ptr as *mut extern "C-unwind" fn(u64, u64) -> u64;
             let func = *func_ptr_slot;

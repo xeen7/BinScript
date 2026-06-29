@@ -671,6 +671,20 @@ Here, `arr` contains elements that are aliased during loop iteration. However, i
 
 The Slab Allocator bypasses the system `malloc` by maintaining thread-local caches of frequently used object sizes (e.g., 32 bytes, 64 bytes).
 
+### 5.2 Inter-Procedural Borrow Inference (Zero-Cost Function Calls)
+
+When an `Owned` object is passed into a function as an argument, the compiler performs **Inter-Procedural Escape Analysis**. Because BinScript utilizes Whole-Program Analysis (merging all `.ts` modules before MIR lowering), it traces the function's internal behavior to construct an *Escape Signature*.
+
+If the target function only reads or mutates the object (a Borrow or Mutable Borrow) but never stores the object in a global variable, closure, or escaping array, the compiler infers a **Borrow**. 
+
+* **The Result**: The object remains `Owned`. The caller passes a raw pointer to the callee at zero cost, bypassing `RcInc` and `RcDec` operations entirely. This guarantees native C++ speeds for function arguments without requiring manual lifetime annotations (like Rust's `&` or JSDoc hints).
+
+### 5.3 Does this include Mutable Borrowing?
+
+**Yes.** Unlike Rust, which requires explicit `&mut` annotations and strictly enforces the "aliasing XOR mutation" rule at compile time (often frustrating developers), BinScript implicitly handles mutable borrowing through its whole-program escape analysis.
+
+If a function receives an `Owned` object and mutates its properties (e.g., `user.age += 1`), the inference engine tracks this mutation. As long as the mutated object isn't assigned to an escaping context (like a global map), the engine safely treats it as a Mutable Borrow. This gives developers the performance of Rust's `&mut` with the ergonomics of JavaScript.
+
 ### Example 5.1: Unique Ownership Passing 1
 
 ```typescript

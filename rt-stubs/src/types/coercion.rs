@@ -125,7 +125,7 @@ pub unsafe extern "C-unwind" fn __bs_Boolean(val: u64) -> u64 {
         !s.is_empty()
     } else if tag == 0xFFF8_0000_0000_0000 {
         true // symbols are always truthy
-    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFD_0000_0000_0000 {
         true
     } else {
         let f = f64::from_bits(val);
@@ -139,7 +139,7 @@ pub unsafe extern "C-unwind" fn __bs_Object(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF1_0000_0000_0000 || tag == 0xFFF2_0000_0000_0000 {
         __bs_new_object()
-    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFD_0000_0000_0000 {
         val
     } else if tag == 0xFFF7_0000_0000_0000 {
         __bs_String_new_1(val)
