@@ -254,7 +254,7 @@ pub fn run(cfg: &CompileConfig) -> CompileResult<()> {
     }
     ownership_inference::run_ownership_analysis(&mut mir_module);
     mir::lifecycle::run_lifecycle_pass(&mut mir_module);
-    tracing::info!("MIR main_body: {:#?}", mir_module.main_body);
+    for f in &mir_module.functions { tracing::info!("MIR function: {:#?}", f); } tracing::info!("MIR main_body: {:#?}", mir_module.main_body);
     for func in &mir_module.functions {
         if func.name.contains("runTests") {
             println!("MIR outerGen: {:#?}", func);

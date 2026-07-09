@@ -1,7 +1,7 @@
 // Helper to extract a Rust &str from a NaN-boxed string pointer
 pub unsafe fn get_c_string_from_tagged(val: u64) -> &'static str {
     let tag = val & 0xFFFF_0000_0000_0000;
-    if tag != 0xFFF7_0000_0000_0000 {
+    if tag != 0xFFF7_0000_0000_0000 && tag != 0x7FF7_0000_0000_0000 {
         panic!("Expected string value");
     }
     let payload = val & 0x0000_FFFF_FFFF_FFFF;

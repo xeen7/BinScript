@@ -1,0 +1,120 @@
+--- rt-stubs/src/objects/builtins/object.rs
++++ rt-stubs/src/objects/builtins/object.rs
+@@ -32,10 +32,18 @@
+-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
++    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
+         if payload != 0 {
+             let obj_ptr = payload as *mut u8;
+-            let vtable_ptr = *(obj_ptr as *const *const VTable);
++            let is_object = if tag == 0xFFFC_0000_0000_0000 {
++                let header = obj_ptr.wrapping_sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++                let flags = unsafe { (*header).flags.load(std::sync::atomic::Ordering::Relaxed) };
++                (flags & crate::circ::VTABLE_PTR) != 0
++            } else {
++                true
++            };
++            if is_object {
++                let vtable_ptr = *(obj_ptr as *const *const VTable);
+             if !vtable_ptr.is_null() {
+@@ -58,3 +66,4 @@
+                 }
+             }
++            }
+         }
+@@ -99,10 +108,18 @@
+-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
++    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
+         if payload != 0 {
+             let obj_ptr = payload as *mut u8;
+-            let vtable_ptr = *(obj_ptr as *const *const VTable);
++            let is_object = if tag == 0xFFFC_0000_0000_0000 {
++                let header = obj_ptr.wrapping_sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++                let flags = unsafe { (*header).flags.load(std::sync::atomic::Ordering::Relaxed) };
++                (flags & crate::circ::VTABLE_PTR) != 0
++            } else {
++                true
++            };
++            if is_object {
++                let vtable_ptr = *(obj_ptr as *const *const VTable);
+             if !vtable_ptr.is_null() {
+@@ -137,3 +154,4 @@
+                 }
+             }
++            }
+         }
+@@ -146,10 +164,18 @@
+-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
++    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
+         if payload != 0 {
+             let obj_ptr = payload as *mut u8;
+-            let vtable_ptr = *(obj_ptr as *const *const VTable);
++            let is_object = if tag == 0xFFFC_0000_0000_0000 {
++                let header = obj_ptr.wrapping_sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++                let flags = unsafe { (*header).flags.load(std::sync::atomic::Ordering::Relaxed) };
++                (flags & crate::circ::VTABLE_PTR) != 0
++            } else {
++                true
++            };
++            if is_object {
++                let vtable_ptr = *(obj_ptr as *const *const VTable);
+             if !vtable_ptr.is_null() {
+@@ -185,3 +211,4 @@
+                 }
+             }
++            }
+         }
+@@ -195,11 +222,19 @@
+-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
++    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
+         if payload != 0 {
+             let obj_ptr = payload as *mut u8;
++            let is_object = if tag == 0xFFFC_0000_0000_0000 {
++                let header = obj_ptr.wrapping_sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++                let flags = unsafe { (*header).flags.load(std::sync::atomic::Ordering::Relaxed) };
++                (flags & crate::circ::VTABLE_PTR) != 0
++            } else {
++                true
++            };
++            if is_object {
+             let push_entry = |arr, k: &str, v: u64| {
+@@ -242,3 +277,4 @@
+                 }
+             }
++            }
+         }
+@@ -251,10 +287,19 @@
+-    if target_tag == 0xFFF6_0000_0000_0000 || target_tag == 0xFFFC_0000_0000_0000 || target_tag == 0xFFFE_0000_0000_0000 {
++    if target_tag == 0xFFF6_0000_0000_0000 || target_tag == 0xFFFC_0000_0000_0000 || target_tag == 0xFFFE_0000_0000_0000 {
+         let target_payload = target & 0x0000_FFFF_FFFF_FFFF;
+         let target_ptr = target_payload as *mut u8;
+-        if source_tag == 0xFFF6_0000_0000_0000 || source_tag == 0xFFFC_0000_0000_0000 || source_tag == 0xFFFE_0000_0000_0000 {
++        let is_target_object = if target_tag == 0xFFFC_0000_0000_0000 {
++            let header = target_ptr.wrapping_sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++            let flags = unsafe { (*header).flags.load(std::sync::atomic::Ordering::Relaxed) };
++            (flags & crate::circ::VTABLE_PTR) != 0
++        } else {
++            true
++        };
++        if !is_target_object { return target; }
++        if source_tag == 0xFFF6_0000_0000_0000 || source_tag == 0xFFFC_0000_0000_0000 || source_tag == 0xFFFE_0000_0000_0000 {
+             let source_payload = source & 0x0000_FFFF_FFFF_FFFF;
+             let source_ptr = source_payload as *mut u8;
+-            let vtable_ptr = *(source_ptr as *const *const VTable);
++            let is_source_object = if source_tag == 0xFFFC_0000_0000_0000 {
++                let header = source_ptr.wrapping_sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++                let flags = unsafe { (*header).flags.load(std::sync::atomic::Ordering::Relaxed) };
++                (flags & crate::circ::VTABLE_PTR) != 0
++            } else {
++                true
++            };
++            if is_source_object {
++                let vtable_ptr = *(source_ptr as *const *const VTable);
+             if !vtable_ptr.is_null() {
+@@ -285,3 +330,4 @@
+             }
++            }
+         }

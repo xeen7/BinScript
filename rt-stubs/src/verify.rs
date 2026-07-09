@@ -86,6 +86,7 @@ pub unsafe extern "C-unwind" fn __bs_verify_check_leaks() {
     
     let tracked = TRACKED_ALLOCS.lock().unwrap();
     if !tracked.is_empty() {
+        crate::circ::__bs_print_rc_stats();
         println!("FATAL ERROR: Memory Leak detected! {} allocations not freed", tracked.len());
         for &actual_ptr in tracked.iter() {
             let header = unsafe { (actual_ptr as *mut u8).sub(crate::circ::CircHeader::SIZE) as *mut crate::circ::CircHeader };

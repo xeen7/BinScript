@@ -23,7 +23,7 @@ pub static ARRAY_ITERATORS: Lazy<Mutex<HashMap<usize, ArrayIteratorState>>> = La
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_generator_next(gen_tagged: u64, sent_value: u64) -> u64 {
     let tag = gen_tagged & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFFB_0000_0000_0000 {
+    if crate::dynamic_call::helpers::is_array_tag(gen_tagged) {
         let arr_ptr = (gen_tagged & 0x0000_FFFF_FFFF_FFFF) as *mut crate::array::BsArray;
         if arr_ptr.is_null() {
             return 0xFFF1_0000_0000_0000; // undefined
@@ -54,7 +54,7 @@ pub unsafe extern "C-unwind" fn __bs_generator_next(gen_tagged: u64, sent_value:
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_generator_is_done(gen_tagged: u64) -> u64 {
     let tag = gen_tagged & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFFB_0000_0000_0000 {
+    if crate::dynamic_call::helpers::is_array_tag(gen_tagged) {
         let arr_ptr = (gen_tagged & 0x0000_FFFF_FFFF_FFFF) as *mut crate::array::BsArray;
         if arr_ptr.is_null() {
             return 0xFFF4_0000_0000_0000; // true (done)

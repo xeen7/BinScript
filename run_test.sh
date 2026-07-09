@@ -70,7 +70,9 @@ if [ $? -eq 0 ]; then
     echo "Compilation successful! Running ./$OUT_PATH..."
     echo "--------------------------------------------------"
     ./"$OUT_PATH"
+    RET=$?
     echo "--------------------------------------------------"
+    exit $RET
 else
     echo "Compilation failed."
     exit 1

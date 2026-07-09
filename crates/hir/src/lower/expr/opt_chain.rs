@@ -100,9 +100,9 @@ impl LowerCtx {
         }
     }
     
-    fn build_chain_expr(&mut self, temp_bid: BindingId, links: &[ChainLink]) -> CompileResult<HirExpr> {
+    fn build_chain_expr(&mut self, current_bid: BindingId, links: &[ChainLink]) -> CompileResult<HirExpr> {
         if links.is_empty() {
-            return Ok(HirExpr::Var(temp_bid));
+            return Ok(HirExpr::Var(current_bid));
         }
         
         let link = &links[0];
@@ -111,14 +111,14 @@ impl LowerCtx {
         let op_expr = match link {
             ChainLink::Member { property, .. } => {
                 HirExpr::MemberGet {
-                    object: Box::new(HirExpr::Var(temp_bid)),
+                    object: Box::new(HirExpr::Var(current_bid)),
                     property: property.clone(),
                 }
             }
             ChainLink::Index { index_expr, .. } => {
                 let idx = self.lower_expr(index_expr)?;
                 HirExpr::IndexGet {
-                    object: Box::new(HirExpr::Var(temp_bid)),
+                    object: Box::new(HirExpr::Var(current_bid)),
                     index: Box::new(idx),
                 }
             }
@@ -137,26 +137,31 @@ impl LowerCtx {
                     }
                 }
                 HirExpr::Call {
-                    callee: Box::new(HirExpr::Var(temp_bid)),
+                    callee: Box::new(HirExpr::Var(current_bid)),
                     args: lowered_args,
                 }
             }
         };
         
+        let next_bid = self.next_binding;
+        self.next_binding += 1;
+        let current_func = *self.function_stack.last().unwrap_or(&0);
+        self.binding_owners.insert(next_bid, current_func);
+        
         let assign_expr = HirExpr::Assign {
-            target: temp_bid,
+            target: next_bid,
             value: Box::new(op_expr),
         };
         
         if link.is_optional() {
             let is_null = HirExpr::BinOp(
                 BinOp::StrictEq,
-                Box::new(HirExpr::Var(temp_bid)),
+                Box::new(HirExpr::Var(current_bid)),
                 Box::new(HirExpr::Lit(Literal::Null)),
             );
             let is_undefined = HirExpr::BinOp(
                 BinOp::StrictEq,
-                Box::new(HirExpr::Var(temp_bid)),
+                Box::new(HirExpr::Var(current_bid)),
                 Box::new(HirExpr::Lit(Literal::Undefined)),
             );
             let cond = HirExpr::BinOp(
@@ -168,7 +173,7 @@ impl LowerCtx {
             let else_branch = if rest.is_empty() {
                 assign_expr
             } else {
-                let rest_expr = self.build_chain_expr(temp_bid, rest)?;
+                let rest_expr = self.build_chain_expr(next_bid, rest)?;
                 HirExpr::Seq(vec![assign_expr, rest_expr])
             };
             
@@ -181,7 +186,7 @@ impl LowerCtx {
             if rest.is_empty() {
                 Ok(assign_expr)
             } else {
-                let rest_expr = self.build_chain_expr(temp_bid, rest)?;
+                let rest_expr = self.build_chain_expr(next_bid, rest)?;
                 Ok(HirExpr::Seq(vec![assign_expr, rest_expr]))
             }
         }

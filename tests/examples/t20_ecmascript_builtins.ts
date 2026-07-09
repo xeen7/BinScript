@@ -84,6 +84,7 @@ function runJSONTests() {
     const obj = { name: "Antigravity", age: 1.0, active: true };
     const jsonStr = JSON.stringify(obj);
 
+    console.log("JSON is: " + jsonStr);
     assertEqual(jsonStr, '{"active":true,"age":1,"name":"Antigravity"}', "JSON stringify");
 
     const parsed = JSON.parse(jsonStr);

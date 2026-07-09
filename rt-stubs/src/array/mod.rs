@@ -26,7 +26,7 @@ pub struct BsArray {
 /// Returns null if the tag doesn't match TAG_ARRAY.
 pub(crate) unsafe fn untag_array(tagged: u64) -> *mut BsArray {
     let tag = tagged & TAG_MASK;
-    if tag != TAG_ARRAY {
+    if tag != TAG_ARRAY && tag != crate::dynamic_call::helpers::TAG_OWNED_ARRAY && tag != crate::dynamic_call::helpers::TAG_ARENA_ARRAY {
         return std::ptr::null_mut();
     }
     let payload = tagged & PAYLOAD_MASK;
@@ -83,6 +83,8 @@ pub unsafe extern "C-unwind" fn __bs_array_new() -> u64 {
     (*arr).capacity = 0;
     (*arr).data = std::ptr::null_mut();
     crate::verify::__bs_verify_track_alloc(ptr);
+    crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
+    println!("Allocated Shared Array: {:p}", ptr);
     (ptr as u64) | TAG_ARRAY
 }
 
@@ -121,7 +123,7 @@ pub unsafe extern "C-unwind" fn __bs_array_push_spread(arr_tagged: u64, spread_v
     if arr.is_null() { return 0; }
     
     let tag = spread_val & TAG_MASK;
-    if tag == TAG_ARRAY {
+    if tag == TAG_ARRAY || tag == crate::dynamic_call::helpers::TAG_OWNED_ARRAY || tag == crate::dynamic_call::helpers::TAG_ARENA_ARRAY {
         let src_arr = untag_array(spread_val);
         if !src_arr.is_null() {
             let src_len = (*src_arr).length;
@@ -354,7 +356,7 @@ pub unsafe extern "C-unwind" fn __bs_array_fill(arr_tagged: u64, val: u64, start
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_array_isArray(val: u64) -> u64 {
     let tag = val & TAG_MASK;
-    if tag == TAG_ARRAY {
+    if tag == TAG_ARRAY || tag == crate::dynamic_call::helpers::TAG_OWNED_ARRAY || tag == crate::dynamic_call::helpers::TAG_ARENA_ARRAY {
         0xFFF4_0000_0000_0000 // true
     } else {
         0xFFF3_0000_0000_0000 // false
@@ -605,5 +607,76 @@ unsafe fn value_to_string(val: u64) -> String {
         format!("{}", f as i64)
     } else {
         format!("{}", f)
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_alloc_array() -> u64 {
+    __bs_array_new()
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_alloc_owned_array() -> u64 {
+    let size = std::mem::size_of::<BsArray>();
+    let total_size = crate::circ::CircHeader::SIZE + size;
+
+    let (raw, alloc_size) = crate::slab::fast_alloc_shared(total_size);
+
+    let header = raw as *mut crate::circ::CircHeader;
+    (*header).local_rc = 0;
+    (*header).global_rc.store(0, std::sync::atomic::Ordering::Relaxed);
+    (*header).owner_tid.store(crate::circ::NO_OWNER, std::sync::atomic::Ordering::Relaxed);
+    (*header).flags.store(crate::circ::IS_ARRAY, std::sync::atomic::Ordering::Relaxed);
+    (*header).alloc_size = alloc_size;
+    (*header).crc = 0;
+
+    let ptr = (raw as *mut u8).add(crate::circ::CircHeader::SIZE);
+    let arr = ptr as *mut BsArray;
+    (*arr).length = 0;
+    (*arr).capacity = 0;
+    (*arr).data = std::ptr::null_mut();
+    crate::verify::__bs_verify_track_alloc(ptr);
+    
+    // Increment owned stats
+    crate::circ::OWNED_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    
+    (ptr as u64) | crate::dynamic_call::helpers::TAG_OWNED_ARRAY
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_alloc_arena_array(arena: *mut crate::arena::Arena) -> u64 {
+    let size = std::mem::size_of::<BsArray>();
+    let total_size = crate::circ::CircHeader::SIZE + size;
+
+    let raw = crate::arena::arena_alloc(arena, total_size, 8);
+
+    let header = raw as *mut crate::circ::CircHeader;
+    (*header).local_rc = 0;
+    (*header).global_rc.store(0, std::sync::atomic::Ordering::Relaxed);
+    (*header).owner_tid.store(crate::circ::NO_OWNER, std::sync::atomic::Ordering::Relaxed);
+    (*header).flags.store(crate::circ::IS_ARRAY, std::sync::atomic::Ordering::Relaxed);
+    (*header).alloc_size = total_size as u16;
+    (*header).crc = 0;
+
+    let ptr = (raw as *mut u8).add(crate::circ::CircHeader::SIZE);
+    let arr = ptr as *mut BsArray;
+    (*arr).length = 0;
+    (*arr).capacity = 0;
+    (*arr).data = std::ptr::null_mut();
+    
+    // Register destructor to free the internal dynamic buffer
+    crate::arena::arena_register_dtor(arena, ptr, drop_arena_array);
+    
+    // We do NOT track arena allocations in the global verifier
+    // crate::verify::__bs_verify_track_alloc(ptr);
+    
+    (ptr as u64) | crate::dynamic_call::helpers::TAG_ARENA_ARRAY
+}
+
+unsafe extern "C-unwind" fn drop_arena_array(ptr: *mut u8) {
+    let arr = ptr as *mut BsArray;
+    if !(*arr).data.is_null() {
+        libc::free((*arr).data as *mut libc::c_void);
+        (*arr).data = std::ptr::null_mut();
     }
 }

@@ -14,9 +14,12 @@ pub unsafe extern "C-unwind" fn __bs_strict_eq(l: u64, r: u64) -> u64 {
     let r_tag = r & 0xFFFF_0000_0000_0000;
 
     // Check if either is a plain f64 number.
-    // Top 16 bits of a number are < TAG_MIN (0xFFF1).
-    let l_is_num = (l >> 48) < TAG_MIN;
-    let r_is_num = (r >> 48) < TAG_MIN;
+    // Top 16 bits of a number are < TAG_MIN (0xFFF1) when masked with 0xFFFF.
+    // We must ignore the OWNED bit (0x8000) if we're not careful, but wait, numbers don't have the OWNED bit.
+    // Actually, if it's an OWNED tag, it's NOT a number.
+    // Let's just restore the OWNED bit to 1 for the tag check, so it matches the standard NaN-box logic.
+    let l_is_num = ((l | 0x8000_0000_0000_0000) >> 48) < TAG_MIN;
+    let r_is_num = ((r | 0x8000_0000_0000_0000) >> 48) < TAG_MIN;
 
     if l_is_num && r_is_num {
         let lf = f64::from_bits(l);
@@ -30,7 +33,9 @@ pub unsafe extern "C-unwind" fn __bs_strict_eq(l: u64, r: u64) -> u64 {
             TAG_FALSE
         }
     } else if !l_is_num && !r_is_num {
-        if l_tag == TAG_STRING && r_tag == TAG_STRING {
+        let l_is_str = l_tag == TAG_STRING || l_tag == 0x7FF7_0000_0000_0000;
+        let r_is_str = r_tag == TAG_STRING || r_tag == 0x7FF7_0000_0000_0000;
+        if l_is_str && r_is_str {
             let ls = get_c_string_from_tagged(l);
             let rs = get_c_string_from_tagged(r);
             if ls == rs {
@@ -39,7 +44,9 @@ pub unsafe extern "C-unwind" fn __bs_strict_eq(l: u64, r: u64) -> u64 {
                 TAG_FALSE
             }
         } else {
-            if l == r {
+            // Strip the OWNED bit if both are pointers so we can compare references directly
+            let mask = 0x7FFF_FFFF_FFFF_FFFF;
+            if (l & mask) == (r & mask) {
                 TAG_TRUE
             } else {
                 TAG_FALSE
@@ -68,14 +75,14 @@ pub unsafe extern "C-unwind" fn __bs_add(l: u64, r: u64) -> u64 {
     const TAG_STRING: u64 = 0xFFF7_0000_0000_0000;
     const TAG_MIN: u64    = 0xFFF1;
 
-    let l_is_num = (l >> 48) < TAG_MIN;
-    let r_is_num = (r >> 48) < TAG_MIN;
+    let l_is_num = ((l | 0x8000_0000_0000_0000) >> 48) < TAG_MIN;
+    let r_is_num = ((r | 0x8000_0000_0000_0000) >> 48) < TAG_MIN;
 
     let l_tag = l & 0xFFFF_0000_0000_0000;
     let r_tag = r & 0xFFFF_0000_0000_0000;
 
-    let l_is_str = l_tag == TAG_STRING;
-    let r_is_str = r_tag == TAG_STRING;
+    let l_is_str = l_tag == TAG_STRING || l_tag == 0x7FF7_0000_0000_0000;
+    let r_is_str = r_tag == TAG_STRING || r_tag == 0x7FF7_0000_0000_0000;
 
     if l_is_num && r_is_num {
         // Both plain numbers — float addition
@@ -125,7 +132,7 @@ pub unsafe extern "C-unwind" fn __bs_in(key: u64, obj: u64) -> u64 {
     let key_str = get_c_string_from_tagged(key_str_tagged);
 
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         
@@ -157,7 +164,7 @@ pub unsafe extern "C-unwind" fn __bs_delete_prop(obj: u64, key: u64) -> u64 {
     let key_str = get_c_string_from_tagged(key_str_tagged);
 
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         delete_dynamic_property(obj_ptr, key_str);

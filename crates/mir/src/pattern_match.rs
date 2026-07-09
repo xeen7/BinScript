@@ -15,7 +15,7 @@ pub static RELEASE_VERBS: &[&str] = &[
 
 pub fn is_acquisition_call(instr: &MirInstr) -> Option<(MirReg, String)> {
     match instr {
-        MirInstr::CallDirect(dest, name, _args) => {
+        MirInstr::CallDirect(dest, name, _args) | MirInstr::CallPure(dest, name, _args) => {
             let bare_name = if name.starts_with("__bs_") { &name[5..] } else { name.as_str() };
             if ACQUISITION_VERBS.contains(&bare_name) {
                 return Some((*dest, bare_name.to_string()));
@@ -30,7 +30,7 @@ pub fn is_acquisition_call(instr: &MirInstr) -> Option<(MirReg, String)> {
 
 pub fn is_release_call(instr: &MirInstr) -> Option<(MirReg, String)> {
     match instr {
-        MirInstr::CallDirect(_dest, name, args) => {
+        MirInstr::CallDirect(_dest, name, args) | MirInstr::CallPure(_dest, name, args) => {
             let bare_name = if name.starts_with("__bs_") { &name[5..] } else { name.as_str() };
             if RELEASE_VERBS.contains(&bare_name) {
                 // Return the first argument as the target (the object being released)

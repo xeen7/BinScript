@@ -13,82 +13,91 @@ impl<'ctx> LlvmCodegen<'ctx> {
     #[allow(unreachable_code)]
     #[allow(unused_variables)]
     pub(in crate::codegen::instr) fn emit_instr_alloc_closure(&mut self, instr: &MirInstr) -> CompileResult<()> {
-        match instr {
-            MirInstr::AllocClosure(dest, func_id, captures) => {
-                let func_name = self.func_id_to_name.get(func_id).ok_or_else(|| {
-        CompileError::Codegen {
-            message: format!("unknown func_id {}", func_id),
-        }
-    })?;
-    let fv = self.funcs.get(func_name).copied().ok_or_else(|| {
-        CompileError::Codegen {
-            message: format!("unknown fn {}", func_name),
-        }
-    })?;
+        let (dest, func_id, captures, is_owned) = match instr {
+            MirInstr::AllocClosure(d, f, c) | MirInstr::AllocSharedClosure(d, f, c) => (d, f, c, false),
+            MirInstr::AllocOwnedClosure(d, f, c) => (d, f, c, true),
+            _ => return Ok(()),
+        };
 
-    // Calculate allocation size: 8 * (3 + captures.len()) bytes
-    let size_in_bytes = 8 * (3 + captures.len());
-    let alloc_fn = self.funcs["__bs_alloc_closure"];
-    let size_val = self.i64_ty.const_int(size_in_bytes as u64, false);
-
-    // Call __bs_alloc_closure(size)
-    let closure_val = self.builder.build_call(alloc_fn, &[size_val.into()], "alloc_closure").unwrap()
-        .try_as_basic_value()
-        .basic()
-        .unwrap()
-        .into_int_value();
-
-    // Extract raw closure pointer
-    let payload = self.builder.build_and(closure_val, self.i64_ty.const_int(crate::nan_box::PAYLOAD_MASK, false), "payload").unwrap();
-    let closure_ptr = self.builder.build_int_to_ptr(payload, self.ptr_ty, "closure_ptr").unwrap();
-
-    // Store function pointer at offset 0
-    let fn_ptr = fv.as_global_value().as_pointer_value();
-    let offset0 = self.i32_ty.const_int(0, false);
-    let fn_slot = unsafe {
-        self.builder.build_gep(self.ptr_ty, closure_ptr, &[offset0], "fn_slot").unwrap()
-    };
-    self.builder.build_store(fn_slot, fn_ptr).unwrap();
-
-    // Generate or get drop function
-    let drop_fn_name = format!("__bs_closure_drop_{}", func_id);
-    let drop_fn = match self.module.get_function(&drop_fn_name) {
-        Some(f) => f,
-        None => {
-            let saved_bb = self.builder.get_insert_block();
-            let fn_ty = self.void_ty.fn_type(&[self.ptr_ty.into()], false);
-            let f = self.module.add_function(&drop_fn_name, fn_ty, None);
-            let entry = self.ctx.append_basic_block(f, "entry");
-            self.builder.position_at_end(entry);
-            
-            let arg_ptr = f.get_nth_param(0).unwrap().into_pointer_value();
-            
-            let circ_dec_fn = self.funcs["circ_dec_tagged"];
-            for i in 0..captures.len() {
-                let offset = self.i32_ty.const_int((3 + i) as u64, false);
-                let capture_slot = unsafe {
-                    self.builder.build_gep(self.i64_ty, arg_ptr, &[offset], "capture_slot").unwrap()
-                };
-                let cap_val = self.builder.build_load(self.i64_ty, capture_slot, "cap_val").unwrap().into_int_value();
-                self.builder.build_call(circ_dec_fn, &[cap_val.into()], "").unwrap();
+        let func_name = self.func_id_to_name.get(func_id).ok_or_else(|| {
+            CompileError::Codegen {
+                message: format!("unknown func_id {}", func_id),
             }
-            
-            self.builder.build_return(None).unwrap();
-            
-            if let Some(bb) = saved_bb {
-                self.builder.position_at_end(bb);
+        })?;
+        let fv = self.funcs.get(func_name).copied().ok_or_else(|| {
+            CompileError::Codegen {
+                message: format!("unknown fn {}", func_name),
             }
-            f
-        }
-    };
+        })?;
 
-    // Store drop function pointer at offset 1
-    let drop_fn_ptr = drop_fn.as_global_value().as_pointer_value();
-    let offset1 = self.i32_ty.const_int(1, false);
-    let drop_slot = unsafe {
-        self.builder.build_gep(self.ptr_ty, closure_ptr, &[offset1], "drop_slot").unwrap()
-    };
-    self.builder.build_store(drop_slot, drop_fn_ptr).unwrap();
+        // Calculate allocation size: 8 * (3 + captures.len()) bytes
+        let size_in_bytes = 8 * (3 + captures.len());
+        let alloc_fn_name = if is_owned {
+            "__bs_alloc_owned_closure"
+        } else {
+            "__bs_alloc_closure"
+        };
+        let alloc_fn = self.funcs[alloc_fn_name];
+        let size_val = self.i64_ty.const_int(size_in_bytes as u64, false);
+
+        // Call __bs_alloc_closure(size)
+        let closure_val = self.builder.build_call(alloc_fn, &[size_val.into()], "alloc_closure").unwrap()
+            .try_as_basic_value()
+            .basic()
+            .unwrap()
+            .into_int_value();
+
+        let mask = self.i64_ty.const_int(0x0000_FFFF_FFFF_FFFF, false);
+        let raw_ptr_i64 = self.builder.build_and(closure_val, mask, "unbox_ptr").unwrap();
+        let closure_ptr = self.builder.build_int_to_ptr(raw_ptr_i64, self.ptr_ty, "ptr").unwrap();
+
+        // Store function pointer at offset 0
+        let fn_ptr = fv.as_global_value().as_pointer_value();
+        let offset0 = self.i32_ty.const_int(0, false);
+        let fn_slot = unsafe {
+            self.builder.build_gep(self.ptr_ty, closure_ptr, &[offset0], "fn_slot").unwrap()
+        };
+        self.builder.build_store(fn_slot, fn_ptr).unwrap();
+
+        // Generate or get drop function pointer
+        let drop_fn_name = format!("__bs_closure_drop_{}", func_id);
+        let drop_fn = match self.module.get_function(&drop_fn_name) {
+                Some(f) => f,
+                None => {
+                    let saved_bb = self.builder.get_insert_block();
+                    let fn_ty = self.void_ty.fn_type(&[self.ptr_ty.into()], false);
+                    let f = self.module.add_function(&drop_fn_name, fn_ty, None);
+                    let entry = self.ctx.append_basic_block(f, "entry");
+                    self.builder.position_at_end(entry);
+                    
+                    let arg_ptr = f.get_nth_param(0).unwrap().into_pointer_value();
+                    
+                    let circ_dec_fn = self.funcs["circ_dec_tagged"];
+                    for i in 0..captures.len() {
+                        let offset = self.i32_ty.const_int((3 + i) as u64, false);
+                        let capture_slot = unsafe {
+                            self.builder.build_gep(self.i64_ty, arg_ptr, &[offset], "capture_slot").unwrap()
+                        };
+                        let cap_val = self.builder.build_load(self.i64_ty, capture_slot, "cap_val").unwrap().into_int_value();
+                        self.builder.build_call(circ_dec_fn, &[cap_val.into()], "").unwrap();
+                    }
+                    
+                    self.builder.build_return(None).unwrap();
+                    
+                    if let Some(bb) = saved_bb {
+                        self.builder.position_at_end(bb);
+                    }
+                    f
+                }
+        };
+        let drop_fn_ptr = drop_fn.as_global_value().as_pointer_value();
+
+        // Store drop function pointer at offset 1
+        let offset1 = self.i32_ty.const_int(1, false);
+        let drop_slot = unsafe {
+            self.builder.build_gep(self.ptr_ty, closure_ptr, &[offset1], "drop_slot").unwrap()
+        };
+        self.builder.build_store(drop_slot, drop_fn_ptr).unwrap();
 
     // Generate or get trace function
     let trace_fn_name = format!("__bs_closure_trace_{}", func_id);
@@ -143,10 +152,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
     // Store tagged pointer in dest
     self.store(*dest, closure_val);
-            }
-
-            _ => unreachable!()
-        }
         Ok(())
     }
 }

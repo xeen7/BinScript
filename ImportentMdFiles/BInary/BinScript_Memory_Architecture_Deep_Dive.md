@@ -9293,3 +9293,28 @@ In this trace, the even loops produce Layer 4 allocations, while the odd loops p
 ---
 > End of Document. Generated to exceed 2000 lines for comprehensive architectural overview.
 
+
+## 11. Scalability and the RC vs. Ownership Inference Paradigm
+
+A common question regarding the 4-layer architecture is: **When do we use RC, and when do we use the ownership inference approach? And can this scale?**
+
+### 11.1 The Fast Path vs. The Fallback
+
+BinScript uses both Ownership Inference and Reference Counting simultaneously. The compiler makes static decisions during compilation and falls back to RC dynamically when static analysis isn't enough.
+
+*   **The Fast Path (Ownership Inference):** Used when the compiler can statically prove the exact lifetime of an object. This applies to local variables that never escape, and uniquely owned objects. In these cases, the compiler emits a direct `Drop(Owned)` instruction, completely bypassing the global cycle collector and atomic reference counts. The object is tagged with `0xFFFC` (Owned).
+*   **The Dynamic Fallback (Reference Counting / Cycle Collection):** Used when the compiler cannot statically guarantee the lifetime of an object. This includes global variables, objects captured by escaping closures, and complex dynamic property assignments. The object is tagged with `0xFFF6` (Shared).
+
+### 11.2 Scalability Assessment
+
+**Can this scale? Yes, exceptionally well.**
+
+1.  **The 80/20 Rule:** In typical applications, 80-90% of objects are short-lived, localized, and never escape their creating function. By freeing 90% of objects instantly via the Fast Path, the overhead on the RC and Cycle Collector is drastically reduced.
+2.  **Eliminating Atomics:** Traditional RC requires an atomic increment/decrement on every assignment. BinScript avoids these expensive operations for the vast majority of objects.
+3.  **Minimal Pauses:** The Cycle Collector only traces "Shared" objects (the remaining 10-20%), ensuring garbage collection pauses remain imperceptible.
+
+### 11.3 Engineering Challenges
+
+While highly scalable, the architecture must navigate certain challenges:
+*   **Conservative Escape Analysis:** If the escape analysis logic is too conservative, objects are prematurely downgraded to `Shared`, increasing RC overhead.
+*   **De-optimization Cliffs:** Developers might unintentionally trigger the RC path (e.g., capturing a variable in a tiny closure). Educating developers on "BinScript-optimized" code will be key to unlocking maximum performance.

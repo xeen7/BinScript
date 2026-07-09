@@ -57,7 +57,7 @@ pub fn split_critical_edges(func: &mut MirFunction) {
     func.blocks.extend(new_blocks);
 }
 
-pub fn run_liveness_analysis(func: &mut MirFunction) -> LivenessInfo {
+pub fn run_liveness_analysis(func: &mut MirFunction, alias_graph: &crate::alias_graph::AliasGraph) -> LivenessInfo {
     split_critical_edges(func);
 
     let mut live_in: HashMap<BlockId, HashSet<MirReg>> = HashMap::new();
@@ -116,6 +116,18 @@ pub fn run_liveness_analysis(func: &mut MirFunction) -> LivenessInfo {
                 }
             }
 
+            // Liveness Extension: if a borrowed register is live, its origin MUST be live
+            let mut alias_additions = Vec::new();
+            for &r in &new_in {
+                let origins = alias_graph.get_borrow_origins(r);
+                for o in origins {
+                    alias_additions.push(o);
+                }
+            }
+            for o in alias_additions {
+                new_in.insert(o);
+            }
+
             if live_in.get(&block.id) != Some(&new_in) {
                 live_in.insert(block.id, new_in);
                 changed = true;
@@ -153,6 +165,14 @@ pub fn run_liveness_analysis(func: &mut MirFunction) -> LivenessInfo {
                     // This is the last use of 'u' in this block, and it doesn't live out!
                     b_last_uses.entry(idx).or_default().push(u);
                     currently_live.insert(u);
+                }
+                
+                let origins = alias_graph.get_borrow_origins(u);
+                for o in origins {
+                    if !currently_live.contains(&o) {
+                        b_last_uses.entry(idx).or_default().push(o);
+                        currently_live.insert(o);
+                    }
                 }
             }
         }
@@ -203,7 +223,7 @@ fn get_defs_uses(instr: &MirInstr) -> (Vec<MirReg>, Vec<MirReg>) {
         MirInstr::LoadProp(d, s, _) => { defs.push(*d); uses.push(*s); }
         MirInstr::StoreProp(s, _, op, _) => { uses.push(*s); add_op_uses(op, &mut uses); }
         MirInstr::DeleteProp(d, s, op) => { defs.push(*d); add_op_uses(s, &mut uses); add_op_uses(op, &mut uses); }
-        MirInstr::AllocClosure(d, _, caps) => { defs.push(*d); add_args_uses(caps, &mut uses); }
+        MirInstr::AllocClosure(d, _, caps) | MirInstr::AllocSharedClosure(d, _, caps) | MirInstr::AllocOwnedClosure(d, _, caps) => { defs.push(*d); add_args_uses(caps, &mut uses); }
         MirInstr::Suspend(_, op) => add_op_uses(op, &mut uses),
         MirInstr::Resume(d, _) => defs.push(*d),
         MirInstr::TryEnter { .. } | MirInstr::TryExit => {}
@@ -227,7 +247,7 @@ fn get_defs_uses(instr: &MirInstr) -> (Vec<MirReg>, Vec<MirReg>) {
         MirInstr::Neg(d, op) | MirInstr::Plus(d, op) | MirInstr::Not(d, op) | MirInstr::BitNot(d, op) => {
             defs.push(*d); add_op_uses(op, &mut uses);
         }
-        MirInstr::CallDirect(d, _, args) | MirInstr::CallBuiltin(d, _, args) => {
+        MirInstr::CallDirect(d, _, args) | MirInstr::CallPure(d, _, args) | MirInstr::CallBuiltin(d, _, args) => {
             defs.push(*d); add_args_uses(args, &mut uses);
         }
         MirInstr::Branch(op, _, _) => add_op_uses(op, &mut uses),
@@ -239,7 +259,8 @@ fn get_defs_uses(instr: &MirInstr) -> (Vec<MirReg>, Vec<MirReg>) {
         MirInstr::ScopeGuardPush { reg, .. } => uses.push(*reg),
         MirInstr::ScopeGuardCancel { reg, .. } => uses.push(*reg),
         MirInstr::ScopeGuardFlushTo { .. } => {}
-        MirInstr::Borrow(d, s) | MirInstr::BorrowMut(d, s) => { defs.push(*d); uses.push(*s); }
+        MirInstr::Borrow(d, s) | MirInstr::BorrowMut(d, s) => { defs.push(*d); uses.push(*s); },
+        MirInstr::ForceOwnedTag(d) => { defs.push(*d); uses.push(*d); },
     }
 
     (defs, uses)

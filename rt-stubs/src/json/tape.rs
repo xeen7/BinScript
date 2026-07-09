@@ -94,7 +94,7 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
     if tag == TAG_JSON_TAPE {
         return __bs_json_tape_get(obj_tagged, prop_str, len);
     }
-    if tag == 0xFFFB_0000_0000_0000 {
+    if tag == 0xFFFB_0000_0000_0000 || tag == 0x7FFB_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 {
         let prop_slice = std::slice::from_raw_parts(prop_str, len as usize);
         if prop_slice == b"length" {
             return crate::array::__bs_array_length(obj_tagged);
@@ -107,19 +107,20 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
             // Fall through to check dynamic properties for arrays
             let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;
             if let Some(val) = crate::get_dynamic_property(payload as *mut u8, s) {
+                crate::circ::circ_inc_tagged(val);
                 return val;
             }
         }
         return 0xFFF1_0000_0000_0000; // undefined
     }
-    if tag == 0xFFF7_0000_0000_0000 {
+    if tag == 0xFFF7_0000_0000_0000 || tag == 0x7FF7_0000_0000_0000 {
         let prop_slice = std::slice::from_raw_parts(prop_str, len as usize);
         if prop_slice == b"length" {
             return crate::string::__bs_string_length(obj_tagged);
         }
         return 0xFFF1_0000_0000_0000; // undefined
     }
-    if tag != 0xFFF6_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
         return 0xFFF1_0000_0000_0000; // undefined
     }
     
@@ -143,7 +144,9 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
                 let name_slice = std::slice::from_raw_parts(name_ptr as *const u8, name_len);
                 if name_slice == prop_slice {
                     let field_slot = (obj_ptr as *mut u64).add(2 + i);
-                    return *field_slot;
+                    let val = *field_slot;
+                    crate::circ::circ_inc_tagged(val);
+                    return val;
                 }
             }
         }
@@ -151,13 +154,15 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
 
     // 2. Check inline and dynamic properties
     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
-        if tag == 0xFFF6_0000_0000_0000 {
+        if true {
             let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
             if let Some(val) = crate::objects::dynamic_props::get_inline_property(props_slot, prop_name) {
+                crate::circ::circ_inc_tagged(val);
                 return val;
             }
         }
         if let Some(val) = crate::get_dynamic_property(obj_ptr, prop_name) {
+            crate::circ::circ_inc_tagged(val);
             return val;
         }
     }
@@ -188,7 +193,9 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
                                 let name_bytes = name_cstr.to_bytes();
                                 if name_bytes == prop_slice {
                                     let slot_ptr = (proto_ptr as *const u64).add(1 + i);
-                                    return *slot_ptr;
+                                    let val = *slot_ptr;
+                                    crate::circ::circ_inc_tagged(val);
+                                    return val;
                                 }
                             }
                         }
@@ -198,9 +205,11 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
                 if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
                     let props_slot = proto_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
                     if let Some(val) = crate::objects::dynamic_props::get_inline_property(props_slot, prop_name) {
+                        crate::circ::circ_inc_tagged(val);
                         return val;
                     }
                     if let Some(val) = crate::get_dynamic_property(proto_ptr, prop_name) {
+                        crate::circ::circ_inc_tagged(val);
                         return val;
                     }
                 }
@@ -222,7 +231,7 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
     if tag == TAG_JSON_TAPE {
         return;
     }
-    if tag == 0xFFFB_0000_0000_0000 {
+    if tag == 0xFFFB_0000_0000_0000 || tag == 0x7FFB_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 {
         let prop_slice = std::slice::from_raw_parts(prop_str, len as usize);
         if let Ok(s) = std::str::from_utf8(prop_slice) {
             if let Ok(idx) = s.parse::<f64>() {
@@ -232,9 +241,10 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
         }
         return;
     }
-    if tag != 0xFFF6_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
         return;
     }
+    
     
     let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;
     if payload == 0 {
@@ -272,7 +282,7 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
 
     // 2. Otherwise set as inline property
     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
-        if tag == 0xFFF6_0000_0000_0000 {
+        if true {
             let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
             crate::objects::dynamic_props::set_inline_property(props_slot, prop_name.to_string(), val_tagged);
         } else {
@@ -284,7 +294,7 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *const u8, prop_len: u32, val_tagged: u64) -> u64 {
     let tag = obj_tagged & 0xFFFF_0000_0000_0000;
-    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 {
         let prop_slice = std::slice::from_raw_parts(prop_ptr, prop_len as usize);
         if let Ok(s) = std::str::from_utf8(prop_slice) {
             if let Ok(idx) = s.parse::<f64>() {

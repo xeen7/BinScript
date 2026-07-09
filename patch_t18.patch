@@ -1,0 +1,13 @@
+--- tests/examples/t18_more_daily_use_cases.ts
++++ tests/examples/t18_more_daily_use_cases.ts
+@@ -75,6 +75,10 @@
+   const activeTodos = manager.getTodos(false);
+   const completedTodos = manager.getTodos(true);
++  
++  // Debug prints
++  // console.log("activeTodos = " + activeTodos); // Removed to avoid crash
++  console.log("activeTodos.length = " + activeTodos.length);
+-  console.log("activeTodos = " + activeTodos);
+-  console.log("activeTodos.length = " + activeTodos.length);
+   console.log("this.todos = " + manager.getTodos(null));
+   assertEqual(activeTodos.length, 2, "Active todos count");

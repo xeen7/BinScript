@@ -1,6 +1,6 @@
 //! MIR type definitions — three-address, basic-block IR.
 
-use crate::lower::builtins::BuiltinFn;
+pub use crate::lower::builtins::BuiltinFn;
 
 /// Virtual register identifier.
 pub type MirReg = u32;
@@ -63,9 +63,11 @@ pub enum MirInstr {
 
     // ── data movement ──────────────────────────────────────────────────────
     Move(MirReg, MirOperand),
+    ForceOwnedTag(MirReg),
 
     // ── calls ──────────────────────────────────────────────────────────────
     CallDirect(MirReg, String, Vec<MirOperand>),
+    CallPure(MirReg, String, Vec<MirOperand>),
     CallBuiltin(MirReg, BuiltinFn, Vec<MirOperand>),
 
     // ── control flow ───────────────────────────────────────────────────────
@@ -142,6 +144,8 @@ pub enum MirInstr {
     // --- Stage 3 additions ---
     /// Allocate a closure object: `AllocClosure(dest, func_id, captures)`
     AllocClosure(MirReg, hir::FuncId, Vec<MirOperand>),
+    AllocSharedClosure(MirReg, hir::FuncId, Vec<MirOperand>),
+    AllocOwnedClosure(MirReg, hir::FuncId, Vec<MirOperand>),
     /// Dynamically call a closure: `CallClosure(dest, callee_reg, args)`
     CallClosure(MirReg, MirReg, Vec<MirOperand>),
 

@@ -1,0 +1,10 @@
+--- rt-stubs/src/json/tape.rs
++++ rt-stubs/src/json/tape.rs
+@@ -275,6 +275,7 @@
+         map_ptr = Box::into_raw(map);
+         *props_slot = map_ptr as u64;
+     }
++    libc::printf("DEBUG: __bs_prop_set props_slot: %p, map_ptr: %p\n\0".as_ptr() as *const libc::c_char, props_slot, map_ptr);
+     let map = &mut *map_ptr;
+ 
+     // 3. Fallback: string allocation

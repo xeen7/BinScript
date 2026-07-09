@@ -52,11 +52,12 @@ pub const IS_ARRAY: u16 = 1 << 11;
 pub const IS_GENERATOR: u16 = 1 << 12;
 
 // Color bits (3 bits) for Bacon-Rajan cycle collection
-pub const COLOR_MASK: u16 = 0b1110000000;
+pub const COLOR_MASK: u16 = 0b111 << 7;
 pub const COLOR_BLACK: u16 = 0 << 7;
 pub const COLOR_GRAY: u16 = 1 << 7;
 pub const COLOR_WHITE: u16 = 2 << 7;
 pub const COLOR_PURPLE: u16 = 3 << 7;
+pub const COLOR_FREEING: u16 = 4 << 7;
 
 // ── CircHeader layout ──────────────────────────────────────────────────────
 
@@ -81,6 +82,7 @@ pub unsafe extern "C-unwind" fn circ_inc(header: *mut CircHeader) {
     if header.is_null() {
         return;
     }
+    ACTUAL_RC_INCS.fetch_add(1, Ordering::Relaxed);
     let obj_ptr = (header as *mut u8).add(CircHeader::SIZE);
     let global_val = (*header).global_rc.load(Ordering::Relaxed);
     #[cfg(feature = "debug_rc")]
@@ -102,6 +104,7 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
     if header_ptr.is_null() {
         return;
     }
+    ACTUAL_RC_DECS.fetch_add(1, Ordering::Relaxed);
     let header = &*header_ptr;
     let obj_ptr = (header_ptr as *mut u8).add(CircHeader::SIZE);
     let global_val = (*header).global_rc.load(Ordering::Relaxed);
@@ -371,4 +374,35 @@ pub unsafe fn create_builtin_method(obj_tagged: u64, func_ptr: *const u8) -> u64
     *(closure_ptr.add(3)) = obj_tagged; // offset 24
     
     closure_tagged
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_print_rc_stats() {
+    let incs = ACTUAL_RC_INCS.load(std::sync::atomic::Ordering::Relaxed);
+    let decs = ACTUAL_RC_DECS.load(std::sync::atomic::Ordering::Relaxed);
+    let owned = OWNED_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
+    let shared = SHARED_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
+    let bypassed = BYPASSED_RC_OPS.load(std::sync::atomic::Ordering::Relaxed);
+    println!("--- RC STATISTICS ---");
+    println!("Actual RcInc calls on objects: {}", incs);
+    println!("Actual RcDec calls on objects: {}", decs);
+    println!("Objects tracked by RC (Shared Allocs): {}", shared);
+    println!("Objects bypassing RC (Owned Allocs): {}", owned);
+    println!("Dynamically bypassed RC operations: {}", bypassed);
+}
+
+pub static ACTUAL_RC_INCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static ACTUAL_RC_DECS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static SHARED_ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static OWNED_ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static BYPASSED_RC_OPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_cleanup_tagged(tagged: u64) {
+    let tag = tagged & crate::dynamic_call::helpers::TAG_MASK;
+    if tag == crate::dynamic_call::helpers::TAG_OWNED {
+        crate::core::alloc::__bs_drop_owned((tagged & crate::dynamic_call::helpers::PAYLOAD_MASK) as *mut u8);
+    } else {
+        circ_dec_tagged(tagged);
+    }
 }

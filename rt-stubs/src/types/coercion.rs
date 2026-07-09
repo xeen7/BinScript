@@ -8,7 +8,7 @@ use crate::objects::builtins::{
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_String(val: u64) -> u64 {
-    let tag = val & 0xFFFF_0000_0000_0000;
+    let tag = (val | 0x8000_0000_0000_0000) & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF1_0000_0000_0000 {
         create_tagged_string("undefined")
     } else if tag == 0xFFF2_0000_0000_0000 {
@@ -31,7 +31,7 @@ pub unsafe extern "C-unwind" fn __bs_String(val: u64) -> u64 {
             let desc = c_str.to_str().unwrap_or("");
             create_tagged_string(&format!("Symbol({})", desc))
         }
-    } else if tag == 0xFFF6_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = val & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         let vtable_ptr = *(obj_ptr as *const *const VTable);
@@ -73,7 +73,7 @@ pub unsafe extern "C-unwind" fn __bs_String(val: u64) -> u64 {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_Number(val: u64) -> u64 {
-    let tag = val & 0xFFFF_0000_0000_0000;
+    let tag = (val | 0x8000_0000_0000_0000) & 0xFFFF_0000_0000_0000;
     let num = if tag == 0xFFF1_0000_0000_0000 {
         f64::NAN
     } else if tag == 0xFFF2_0000_0000_0000 {
@@ -85,7 +85,7 @@ pub unsafe extern "C-unwind" fn __bs_Number(val: u64) -> u64 {
     } else if tag == 0xFFF7_0000_0000_0000 {
         let s = get_c_string_from_tagged(val);
         s.trim().parse::<f64>().unwrap_or(f64::NAN)
-    } else if tag == 0xFFF6_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = val & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         let vtable_ptr = *(obj_ptr as *const *const VTable);
@@ -111,7 +111,7 @@ pub unsafe extern "C-unwind" fn __bs_Number(val: u64) -> u64 {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_Boolean(val: u64) -> u64 {
-    let tag = val & 0xFFFF_0000_0000_0000;
+    let tag = (val | 0x8000_0000_0000_0000) & 0xFFFF_0000_0000_0000;
     let b = if tag == 0xFFF1_0000_0000_0000 {
         false
     } else if tag == 0xFFF2_0000_0000_0000 {
@@ -125,7 +125,7 @@ pub unsafe extern "C-unwind" fn __bs_Boolean(val: u64) -> u64 {
         !s.is_empty()
     } else if tag == 0xFFF8_0000_0000_0000 {
         true // symbols are always truthy
-    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFD_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || (tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000) || tag == 0xFFFD_0000_0000_0000 {
         true
     } else {
         let f = f64::from_bits(val);
@@ -136,10 +136,10 @@ pub unsafe extern "C-unwind" fn __bs_Boolean(val: u64) -> u64 {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_Object(val: u64) -> u64 {
-    let tag = val & 0xFFFF_0000_0000_0000;
+    let tag = (val | 0x8000_0000_0000_0000) & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF1_0000_0000_0000 || tag == 0xFFF2_0000_0000_0000 {
         __bs_new_object()
-    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFD_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFB_0000_0000_0000 || tag == 0xFFF9_0000_0000_0000 || tag == 0xFFFA_0000_0000_0000 || (tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000) || tag == 0xFFFD_0000_0000_0000 {
         val
     } else if tag == 0xFFF7_0000_0000_0000 {
         __bs_String_new_1(val)

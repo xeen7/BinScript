@@ -5,7 +5,7 @@ pub unsafe extern "C-unwind" fn __bs_Array_new(val: u64) -> u64 {
     let tag = val & 0xFFFF_0000_0000_0000;
     if tag == 0xFFF1_0000_0000_0000 {
         crate::array::__bs_array_new()
-    } else if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
+    } else if crate::dynamic_call::helpers::is_number_tag(tag) {
         let f = f64::from_bits(val);
         let len = f as u32;
         let tagged = crate::array::__bs_array_new();

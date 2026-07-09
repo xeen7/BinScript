@@ -15,14 +15,31 @@ impl<'ctx> LlvmCodegen<'ctx> {
     pub(in crate::codegen::instr) fn emit_instr_alloc_object(&mut self, instr: &MirInstr) -> CompileResult<()> {
         match instr {
             MirInstr::Alloc(dest, class_name) | MirInstr::AllocShared(dest, class_name) => {
-                let fields_count = self.get_all_fields_count(class_name);
-                let size_in_bytes = 8 * (2 + fields_count);
-                let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
-                    CompileError::Codegen {
-                        message: format!("Vtable not found for class {}", class_name),
-                    }
-                })?;
-                let vtable_ptr = vtable_g.as_pointer_value();
+                if class_name == "Array" {
+                    let alloc_fn = self.funcs["__bs_alloc_array"];
+                    let obj_val = self.builder.build_call(alloc_fn, &[], "alloc_array").unwrap()
+                        .try_as_basic_value()
+                        .basic()
+                        .unwrap()
+                        .into_int_value();
+                    self.store(*dest, obj_val);
+                    return Ok(());
+                }
+                let (size_in_bytes, vtable_ptr) = if class_name == "Object" {
+                    let vtable_g = self.module.get_global("OBJECT_VTABLE").unwrap_or_else(|| {
+                        self.module.add_global(self.i64_ty, None, "OBJECT_VTABLE")
+                    });
+                    (16, vtable_g.as_pointer_value())
+                } else {
+                    let fields_count = self.get_all_fields_count(class_name);
+                    let size_in_bytes = 8 * (2 + fields_count);
+                    let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
+                        CompileError::Codegen {
+                            message: format!("Vtable not found for class {}", class_name),
+                        }
+                    })?;
+                    (size_in_bytes, vtable_g.as_pointer_value())
+                };
                 let alloc_fn = self.funcs["__bs_alloc"];
                 let size_val = self.i64_ty.const_int(size_in_bytes as u64, false);
                 let obj_val = self.builder.build_call(alloc_fn, &[vtable_ptr.into(), size_val.into()], "alloc").unwrap()
@@ -33,14 +50,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 self.store(*dest, obj_val);
             }
             MirInstr::AllocAcyclic(dest, class_name) | MirInstr::AllocSharedAcyclic(dest, class_name) => {
-                let fields_count = self.get_all_fields_count(class_name);
-                let size_in_bytes = 8 * (2 + fields_count);
-                let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
-                    CompileError::Codegen {
-                        message: format!("Vtable not found for class {}", class_name),
-                    }
-                })?;
-                let vtable_ptr = vtable_g.as_pointer_value();
+                let (size_in_bytes, vtable_ptr) = if class_name == "Object" {
+                    let vtable_g = self.module.get_global("OBJECT_VTABLE").unwrap_or_else(|| {
+                        self.module.add_global(self.i64_ty, None, "OBJECT_VTABLE")
+                    });
+                    (16, vtable_g.as_pointer_value())
+                } else {
+                    let fields_count = self.get_all_fields_count(class_name);
+                    let size_in_bytes = 8 * (2 + fields_count);
+                    let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
+                        CompileError::Codegen {
+                            message: format!("Vtable not found for class {}", class_name),
+                        }
+                    })?;
+                    (size_in_bytes, vtable_g.as_pointer_value())
+                };
                 let alloc_fn = self.funcs["__bs_alloc_acyclic"];
                 let size_val = self.i64_ty.const_int(size_in_bytes as u64, false);
                 let obj_val = self.builder.build_call(alloc_fn, &[vtable_ptr.into(), size_val.into()], "alloc_acyclic").unwrap()
@@ -51,14 +75,31 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 self.store(*dest, obj_val);
             }
             MirInstr::AllocOwned(dest, class_name) => {
-                let fields_count = self.get_all_fields_count(class_name);
-                let size_in_bytes = 8 * (2 + fields_count);
-                let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
-                    CompileError::Codegen {
-                        message: format!("Vtable not found for class {}", class_name),
-                    }
-                })?;
-                let vtable_ptr = vtable_g.as_pointer_value();
+                if class_name == "Array" {
+                    let alloc_fn = self.funcs["__bs_alloc_owned_array"];
+                    let obj_val = self.builder.build_call(alloc_fn, &[], "alloc_owned_array").unwrap()
+                        .try_as_basic_value()
+                        .basic()
+                        .unwrap()
+                        .into_int_value();
+                    self.store(*dest, obj_val);
+                    return Ok(());
+                }
+                let (size_in_bytes, vtable_ptr) = if class_name == "Object" {
+                    let vtable_g = self.module.get_global("OBJECT_VTABLE").unwrap_or_else(|| {
+                        self.module.add_global(self.i64_ty, None, "OBJECT_VTABLE")
+                    });
+                    (16, vtable_g.as_pointer_value())
+                } else {
+                    let fields_count = self.get_all_fields_count(class_name);
+                    let size_in_bytes = 8 * (2 + fields_count);
+                    let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
+                        CompileError::Codegen {
+                            message: format!("Vtable not found for class {}", class_name),
+                        }
+                    })?;
+                    (size_in_bytes, vtable_g.as_pointer_value())
+                };
                 let alloc_fn = self.funcs["__bs_alloc_owned"];
                 let size_val = self.i64_ty.const_int(size_in_bytes as u64, false);
                 let obj_val = self.builder.build_call(alloc_fn, &[vtable_ptr.into(), size_val.into()], "alloc_owned").unwrap()
@@ -69,14 +110,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 self.store(*dest, obj_val);
             }
             MirInstr::AllocStack(dest, class_name) => {
-                let fields_count = self.get_all_fields_count(class_name);
-                let size_in_bytes = 8 * (2 + fields_count);
-                let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
-                    CompileError::Codegen {
-                        message: format!("Vtable not found for class {}", class_name),
-                    }
-                })?;
-                let vtable_ptr = vtable_g.as_pointer_value();
+                let (size_in_bytes, vtable_ptr) = if class_name == "Object" {
+                    let vtable_g = self.module.get_global("OBJECT_VTABLE").unwrap_or_else(|| {
+                        self.module.add_global(self.i64_ty, None, "OBJECT_VTABLE")
+                    });
+                    (16, vtable_g.as_pointer_value())
+                } else {
+                    let fields_count = self.get_all_fields_count(class_name);
+                    let size_in_bytes = 8 * (2 + fields_count);
+                    let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
+                        CompileError::Codegen {
+                            message: format!("Vtable not found for class {}", class_name),
+                        }
+                    })?;
+                    (size_in_bytes, vtable_g.as_pointer_value())
+                };
                 
                 // Allocate on the stack (use i64 array to guarantee 8-byte alignment)
                 let size_i64_val = self.i64_ty.const_int((size_in_bytes / 8) as u64, false);
@@ -103,20 +151,38 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 
                 // Return NaN-boxed Object pointer
                 let obj_ptr_i64 = self.builder.build_ptr_to_int(alloca_ptr, self.i64_ty, "obj_ptr_i64").unwrap();
-                let tag = self.i64_ty.const_int(0xFFF6_0000_0000_0000, false);
+                let tag = self.i64_ty.const_int(0xFFFE_0000_0000_0000, false);
                 let boxed_ptr = self.builder.build_or(obj_ptr_i64, tag, "boxed_ptr").unwrap();
                 
                 self.store(*dest, boxed_ptr);
             }
             MirInstr::AllocArena(dest, class_name, region_id) => {
-                let fields_count = self.get_all_fields_count(class_name);
-                let size_in_bytes = 8 * (2 + fields_count);
-                let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
-                    CompileError::Codegen {
-                        message: format!("Vtable not found for class {}", class_name),
-                    }
-                })?;
-                let vtable_ptr = vtable_g.as_pointer_value();
+                if class_name == "Array" {
+                    let arena_ptr = *self.arena_ptrs.get(region_id).unwrap();
+                    let alloc_fn = self.funcs["__bs_alloc_arena_array"];
+                    let obj_val = self.builder.build_call(alloc_fn, &[arena_ptr.into()], "alloc_arena_array").unwrap()
+                        .try_as_basic_value()
+                        .basic()
+                        .unwrap()
+                        .into_int_value();
+                    self.store(*dest, obj_val);
+                    return Ok(());
+                }
+                let (size_in_bytes, vtable_ptr) = if class_name == "Object" {
+                    let vtable_g = self.module.get_global("OBJECT_VTABLE").unwrap_or_else(|| {
+                        self.module.add_global(self.i64_ty, None, "OBJECT_VTABLE")
+                    });
+                    (16, vtable_g.as_pointer_value())
+                } else {
+                    let fields_count = self.get_all_fields_count(class_name);
+                    let size_in_bytes = 8 * (2 + fields_count);
+                    let vtable_g = self.vtables.get(class_name).ok_or_else(|| {
+                        CompileError::Codegen {
+                            message: format!("Vtable not found for class {}", class_name),
+                        }
+                    })?;
+                    (size_in_bytes, vtable_g.as_pointer_value())
+                };
                 
                 let arena_alloc_fn = self.funcs["arena_alloc"];
                 let size_val = self.i64_ty.const_int(size_in_bytes as u64, false);
@@ -158,7 +224,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 
                 // Return NaN-boxed Object pointer
                 let obj_ptr_i64 = self.builder.build_ptr_to_int(raw_ptr, self.i64_ty, "obj_ptr_i64").unwrap();
-                let tag = self.i64_ty.const_int(0xFFF6_0000_0000_0000, false);
+                let tag = self.i64_ty.const_int(0xFFFE_0000_0000_0000, false);
                 let boxed_ptr = self.builder.build_or(obj_ptr_i64, tag, "boxed_ptr").unwrap();
                 
                 self.store(*dest, boxed_ptr);

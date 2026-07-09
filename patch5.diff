@@ -1,0 +1,10 @@
+--- rt-stubs/src/objects/builtins/object.rs
++++ rt-stubs/src/objects/builtins/object.rs
+@@ -51,6 +51,7 @@
+             }
+             libc::printf("DEBUG: __bs_object_keys after vtable\n\0".as_ptr() as *const libc::c_char);
+             let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
++            libc::printf("DEBUG: __bs_object_keys props_slot: %p, val: %p\n\0".as_ptr() as *const libc::c_char, props_slot, unsafe { *props_slot });
+             if !unsafe { *props_slot }.is_null() {
+                 libc::printf("DEBUG: __bs_object_keys props_slot not null\n\0".as_ptr() as *const libc::c_char);
+                 let map = unsafe { &**props_slot };

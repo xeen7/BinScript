@@ -86,7 +86,7 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
             false,
         );
         ctx.lower_stmts(&hir.stmts)?;
-        ctx.finish("__bs_main", false, false)
+        ctx.finish("__bs_script_main", false, false)
     };
 
     // Collect all top-level global function declaration IDs

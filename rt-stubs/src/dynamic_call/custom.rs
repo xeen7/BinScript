@@ -93,7 +93,7 @@ pub unsafe extern "C-unwind" fn __bs_call_toString(mut recv: u64, arg: u64, idx_
     }
 
     // Array: coerce to string
-    if tag == TAG_ARRAY {
+    if (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
         return crate::types::coercion::__bs_String(recv);
     }
 
@@ -133,7 +133,7 @@ pub unsafe extern "C-unwind" fn __bs_call_indexOf(mut recv: u64, search: u64, id
             }
         }
     }
-    if tag == TAG_ARRAY {
+    if (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
         crate::array::__bs_array_indexOf(recv, search)
     } else if tag == TAG_STRING {
         let s = crate::get_c_string_from_tagged(recv);

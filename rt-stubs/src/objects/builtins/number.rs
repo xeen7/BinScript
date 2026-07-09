@@ -33,7 +33,7 @@ pub unsafe extern "C-unwind" fn __bs_Number_new_1(val: u64) -> u64 {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_number_isInteger(x: u64) -> u64 {
     let tag = x & TAG_MASK;
-    if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
+    if crate::dynamic_call::helpers::is_number_tag(tag) {
         let f = f64::from_bits(x);
         crate::circ::box_boolean(f.is_finite() && f == f.trunc())
     } else {
@@ -44,7 +44,7 @@ pub unsafe extern "C-unwind" fn __bs_number_isInteger(x: u64) -> u64 {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_number_isSafeInteger(x: u64) -> u64 {
     let tag = x & TAG_MASK;
-    if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
+    if crate::dynamic_call::helpers::is_number_tag(tag) {
         let f = f64::from_bits(x);
         let max_safe = 9007199254740991.0;
         crate::circ::box_boolean(f.is_finite() && f == f.trunc() && f.abs() <= max_safe)

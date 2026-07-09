@@ -45,16 +45,22 @@ pub unsafe fn delete_dynamic_property(obj_ptr: *mut u8, prop_name: &str) -> bool
 }
 
 pub unsafe fn remove_dynamic_properties(obj_ptr: *mut u8) {
-    let removed = {
+    let old_map = {
         let mut map = DYNAMIC_PROPERTIES.lock().unwrap();
         map.remove(&(obj_ptr as usize))
     };
-    if let Some(entry) = removed {
-        for val in entry.values() {
+    if let Some(props) = old_map {
+        for val in props.values() {
             crate::circ::circ_dec_tagged(*val);
         }
     }
 }
+
+pub unsafe fn remove_dynamic_properties_only(obj_ptr: *mut u8) {
+    let mut map = DYNAMIC_PROPERTIES.lock().unwrap();
+    map.remove(&(obj_ptr as usize));
+}
+
 
 pub unsafe fn trace_dynamic_properties(obj_ptr: *mut u8) {
     let vals: Vec<u64> = {
@@ -91,6 +97,14 @@ pub unsafe fn get_inline_property(props_slot: *mut *mut std::collections::HashMa
         } else {
             None
         }
+    }
+}
+
+pub unsafe fn free_inline_properties_only(props_slot: *mut *mut std::collections::HashMap<String, u64>) {
+    if !(*props_slot).is_null() {
+        let bx = Box::from_raw(*props_slot);
+        drop(bx);
+        *props_slot = std::ptr::null_mut();
     }
 }
 

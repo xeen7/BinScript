@@ -3,7 +3,11 @@ pub mod alias_graph;
 pub mod escape;
 pub mod classify;
 pub mod region;
+pub mod native_sigs;
 pub mod acyclic;
+pub mod call_graph;
+pub mod devirtualize;
+pub mod monomorphize;
 
 pub mod liveness;
 
@@ -22,18 +26,72 @@ pub fn run_ownership_analysis(module: &mut MirModule) {
     }
 
     let acyclic_classes = acyclic::compute_acyclic_classes(module);
+    
+    // Closure Devirtualization (CHA)
+    devirtualize::run_devirtualize_pass(module);
+
+    // --- NEW IPA PASS ---
+    let mut module_ea = std::collections::HashMap::new();
+    let cg = call_graph::build_call_graph(module);
+    
+    // Get strongly connected components (SCCs) in reverse topological order
+    // (i.e. we process leaf functions first)
+    let sccs = petgraph::algo::tarjan_scc(&cg.graph);
+    
+    for scc in sccs {
+        let mut changed = true;
+        let mut iter_count = 0;
+        
+        while changed && iter_count < 10 { // Max 10 iterations per SCC to guarantee termination
+            changed = false;
+            iter_count += 1;
+            
+            for &node_idx in &scc {
+                let func_name = &cg.graph[node_idx];
+                let func = if func_name == "__bs_script_main" {
+                    &module.main_body
+                } else {
+                    module.functions.iter().find(|f| f.name == *func_name).unwrap()
+                };
+                
+                let old_ea = module_ea.get(func_name).cloned();
+                let new_ea = escape::run_escape_analysis(func, Some(&module_ea));
+                
+                if let Some(old) = old_ea {
+                    if old.param_escapes != new_ea.param_escapes || old.param_returns != new_ea.param_returns {
+                        changed = true;
+                    }
+                } else {
+                    changed = true;
+                }
+                
+                module_ea.insert(func_name.clone(), new_ea);
+            }
+        }
+    }
+    // --------------------
+    let specialized_signatures = monomorphize::run_monomorphize_pass(module, &mut module_ea);
 
     for func in module.functions.iter_mut() {
-        analyze_function(func, &class_sizes, &acyclic_classes);
+        let sig_args = specialized_signatures.get(&func.name);
+        let sig_vec = sig_args.map(|v| v.iter().map(|arg| arg.memory_class()).collect::<Vec<_>>());
+        analyze_function(func, &class_sizes, &acyclic_classes, &module_ea, sig_vec.as_deref());
     }
-    analyze_function(&mut module.main_body, &class_sizes, &acyclic_classes);
+    analyze_function(&mut module.main_body, &class_sizes, &acyclic_classes, &module_ea, None);
 }
 
-fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::HashMap<String, usize>, acyclic_classes: &std::collections::HashSet<String>) {
+fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::HashMap<String, usize>, acyclic_classes: &std::collections::HashSet<String>, module_ea: &std::collections::HashMap<String, escape::EscapeAnalysis>, signature: Option<&[classify::MemoryClass]>) {
     let ag = alias_graph::build_alias_graph(func);
-    let ea = escape::run_escape_analysis(func);
-    let mut classes = classify::classify_registers(func, &ag, &ea);
-    let liveness = liveness::run_liveness_analysis(func);
+    
+    let mut return_allocations = std::collections::HashSet::new();
+    let mut param_escapes = std::collections::HashMap::new();
+    
+    // We don't have to populate return_allocations / param_escapes perfectly here unless we do IPO.
+    
+
+    let ea = escape::run_escape_analysis(func, Some(module_ea));
+    let mut classes = classify::classify_registers(func, &ag, &ea, &return_allocations, &param_escapes, signature);
+    let liveness = liveness::run_liveness_analysis(func, &ag);
 
     // Collect which registers are actual object allocations (destinations of Alloc instructions).
     // Only these registers should receive Drop/DropStack/RcDec instructions.
@@ -97,6 +155,12 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                             *instr = MirInstr::AllocShared(*dest, class_name.clone());
                         }
                     }
+                    classify::MemoryClass::Borrow => unreachable!(),
+                }
+            } else if let MirInstr::AllocClosure(dest, func_id, captures) = instr {
+                let mem_class = classes.get_class(*dest);
+                if mem_class == classify::MemoryClass::Owned {
+                    *instr = MirInstr::AllocOwnedClosure(*dest, *func_id, captures.clone());
                 }
             }
         }
@@ -139,15 +203,19 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                         continue;
                     }
                     let class = classes.get_class(reg);
-                    // // println!("  class for {}: {:?}", reg, class);
+                    if reg == 58 { println!("EDGE DROP reg=8 block={} class={:?}", block.id, class); }
                     match class {
                         classify::MemoryClass::Arena(_) | classify::MemoryClass::Primitive => {}
                         classify::MemoryClass::Stack => {
                             new_instrs.push(MirInstr::DropStack(reg));
                         }
-                        classify::MemoryClass::Shared | classify::MemoryClass::Owned => {
+                        classify::MemoryClass::Shared => {
                             new_instrs.push(MirInstr::RcDec(reg)); tracing::debug!("Emitting RcDec for {}", reg);
                         }
+                        classify::MemoryClass::Owned => {
+                            new_instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
+                        }
+                        classify::MemoryClass::Borrow => {}
                     }
                 }
             }
@@ -157,7 +225,7 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                 let mut transferred_regs = Vec::new();
                 // Detect Move Semantics for property assignments
                 if let Some(regs_to_drop) = inserts.get(&idx) {
-                    // println!("Instruction {}: regs_to_drop={:?}", idx, regs_to_drop);
+                    println!("Instruction {}: regs_to_drop={:?}", idx, regs_to_drop);
                     if let MirInstr::StoreProp(_, _, MirOperand::Reg(val_reg), ref mut is_moved) = &mut instr {
                         if regs_to_drop.contains(val_reg) {
                             *is_moved = true;
@@ -233,7 +301,7 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                         } else {
                             None
                         }
-                    } else if let MirInstr::LoadField(dest, obj_reg, _) | MirInstr::LoadProp(dest, obj_reg, _) = &instr {
+                    } else if let MirInstr::LoadField(dest, obj_reg, _) = &instr {
                         match classes.get_class(*dest) {
                             classify::MemoryClass::Shared => {
                                 if classes.get_class(*obj_reg) == classify::MemoryClass::Shared {
@@ -243,6 +311,9 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                             }
                             _ => None,
                         }
+                    } else if let MirInstr::LoadProp(_dest, _obj_reg, _) = &instr {
+                        // __bs_prop_get already increments the reference count before returning!
+                        None
                     } else if let MirInstr::LoadGlobal(dest, _) = &instr {
                         match classes.get_class(*dest) {
                             classify::MemoryClass::Shared => {
@@ -266,9 +337,9 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                             }
                             new_instrs.push(rc_inc);
                         }
-                        new_instrs.push(instr);
+                        new_instrs.push(instr.clone());
                     } else {
-                        new_instrs.push(instr);
+                        new_instrs.push(instr.clone());
                         if let Some(mut rc_inc) = maybe_rc_inc {
                             if is_deferred {
                                 if let MirInstr::RcInc(reg) = rc_inc {
@@ -277,6 +348,33 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                                 }
                             }
                             new_instrs.push(rc_inc);
+                        }
+
+                        // If a function returns a fresh allocation (which defaults to a Shared tag at runtime)
+                        // but the ownership inference classifies it as Owned, we must force the tag to be Owned
+                        // so that `Drop` can properly recognize and destroy it instead of ignoring it.
+                        match &instr {
+                            MirInstr::CallDirect(dest, target, _) |
+                            MirInstr::CallPure(dest, target, _) => {
+                                let sig_opt = crate::native_sigs::NativeSignature::get(target);
+                                let returns_fresh = sig_opt.as_ref().map_or(false, |s| s.returns_fresh_allocation);
+                                if returns_fresh && classes.get_class(*dest) == classify::MemoryClass::Owned {
+                                    new_instrs.push(MirInstr::ForceOwnedTag(*dest));
+                                }
+                            }
+                            MirInstr::CallBuiltin(dest, builtin, _) => {
+                                use mir::BuiltinFn;
+                                let returns_fresh = matches!(builtin,
+                                    BuiltinFn::ArrayMap |
+                                    BuiltinFn::ArrayFilter |
+                                    BuiltinFn::ArraySlice |
+                                    BuiltinFn::ArrayConcat
+                                );
+                                if returns_fresh && classes.get_class(*dest) == classify::MemoryClass::Owned {
+                                    new_instrs.push(MirInstr::ForceOwnedTag(*dest));
+                                }
+                            }
+                            _ => {}
                         }
                     }
                 }
@@ -346,8 +444,11 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                                 }
                             }
                             classify::MemoryClass::Owned => {
-                                new_instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
+                                if used_reg != Some(reg) {
+                                    new_instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
+                                }
                             }
+                            classify::MemoryClass::Borrow => {}
                         }
                     }
                 }
@@ -383,11 +484,11 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
         }
     }
 
-    if func.name.contains("testDestructuring") {
+    if func.name.contains("main") || func.name.contains("test") {
         for block in &func.blocks {
-            // println!("Block {}:", block.id);
-            for instr in &block.instrs {
-                // println!("  {:?}", instr);
+            // println!("=== {} Block {}: ===", func.name, block.id);
+            for _instr in &block.instrs {
+                // println!("  {:?}", _instr);
             }
         }
     }

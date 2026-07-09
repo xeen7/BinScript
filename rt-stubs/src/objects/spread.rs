@@ -8,7 +8,7 @@ use sonic_rs::{JsonValueTrait, JsonContainerTrait};
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_object_spread(target_tagged: u64, source_tagged: u64) -> u64 {
     let target_tag = target_tagged & 0xFFFF_0000_0000_0000;
-    if target_tag != 0xFFF6_0000_0000_0000 {
+    if target_tag != 0xFFF6_0000_0000_0000 && target_tag != 0xFFFC_0000_0000_0000 && target_tag != 0xFFFE_0000_0000_0000 {
         return target_tagged;
     }
     let target_payload = target_tagged & 0x0000_FFFF_FFFF_FFFF;
@@ -18,7 +18,7 @@ pub unsafe extern "C-unwind" fn __bs_object_spread(target_tagged: u64, source_ta
     let target_ptr = target_payload as *mut u8;
     
     let source_tag = source_tagged & 0xFFFF_0000_0000_0000;
-    if source_tag == 0xFFF6_0000_0000_0000 {
+    if source_tag == 0xFFF6_0000_0000_0000 || source_tag == 0xFFFC_0000_0000_0000 || source_tag == 0xFFFE_0000_0000_0000 {
         let src_payload = source_tagged & 0x0000_FFFF_FFFF_FFFF;
         if src_payload != 0 {
             let src_ptr = src_payload as *mut u8;

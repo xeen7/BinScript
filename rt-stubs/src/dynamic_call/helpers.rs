@@ -3,8 +3,20 @@ use crate::VTable;
 pub const TAG_ARRAY: u64 = 0xFFFB_0000_0000_0000;
 pub const TAG_STRING: u64 = 0xFFF7_0000_0000_0000;
 pub const TAG_OBJECT: u64 = 0xFFF6_0000_0000_0000;
+pub const TAG_OWNED: u64 = 0xFFFC_0000_0000_0000;
+pub const TAG_OWNED_CLOSURE: u64 = 0x7FF9_0000_0000_0000;
+pub const TAG_OWNED_ARRAY: u64 = 0x7FFB_0000_0000_0000;
+pub const TAG_OWNED_STRING: u64 = 0x7FF7_0000_0000_0000;
+pub const TAG_ARENA_ARRAY: u64 = 0x7FFA_0000_0000_0000;
+pub const TAG_ARENA: u64 = 0xFFFE_0000_0000_0000;
 pub const TAG_MASK: u64 = 0xFFFF_0000_0000_0000;
 pub const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
+
+#[inline(always)]
+pub fn is_array_tag(tag: u64) -> bool {
+    let t = tag & TAG_MASK;
+    t == TAG_ARRAY || t == TAG_OWNED_ARRAY || t == TAG_ARENA_ARRAY
+}
 
 pub unsafe fn get_user_method(receiver: u64, idx: i32) -> Option<*const u8> {
     if idx < 0 { return None; }
@@ -44,3 +56,12 @@ pub unsafe fn value_to_string(val: u64) -> String {
     }
 }
 
+
+#[inline(always)]
+pub fn is_number_tag(tag: u64) -> bool {
+    let tag = tag & 0xFFFF_0000_0000_0000;
+    if tag == 0x7FF7_0000_0000_0000 || tag == 0x7FF9_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 || tag == 0x7FFB_0000_0000_0000 {
+        return false;
+    }
+    tag < 0xFFF0_0000_0000_0000
+}

@@ -30,6 +30,12 @@ pub fn run_region_inference(
 ) -> RegionMap {
     let mut map = RegionMap::new();
     
+    // Async and Generator functions suspend execution. 
+    // ArenaCreate pointers are not saved in the coroutine state, causing LLVM SSA dominance errors.
+    if _func.is_async || _func.is_generator {
+        return map;
+    }
+    
     // Check if ALL allocations are local
     let mut all_local = true;
     for &reg in alloc_regs {

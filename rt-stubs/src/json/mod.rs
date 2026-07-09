@@ -33,7 +33,7 @@ unsafe fn stringify_value(val: u64, out: &mut String) {
             // true
             out.push_str("true");
         }
-        0xFFF7_0000_0000_0000 => {
+        0xFFF7_0000_0000_0000 | 0x7FF7_0000_0000_0000 => {
             // string
             let s = crate::get_c_string_from_tagged(val);
             // very basic escaping
@@ -55,7 +55,7 @@ unsafe fn stringify_value(val: u64, out: &mut String) {
             let materialized = crate::json::tape::__bs_json_tape_materialize(val);
             stringify_value(materialized, out);
         }
-        0xFFF9_0000_0000_0000 => {
+        0xFFF9_0000_0000_0000 | 0x7FFB_0000_0000_0000 => {
             // Array
             out.push('[');
             let len_f = crate::array::__bs_array_length(val);
@@ -70,7 +70,7 @@ unsafe fn stringify_value(val: u64, out: &mut String) {
             out.push(']');
         }
         _ => {
-            if tag < 0xFFF0_0000_0000_0000 {
+            if crate::dynamic_call::helpers::is_number_tag(tag) {
                 // Number
                 let num = f64::from_bits(val);
                 if num.is_nan() || num.is_infinite() {
@@ -80,7 +80,7 @@ unsafe fn stringify_value(val: u64, out: &mut String) {
                 } else {
                     out.push_str(&format!("{}", num));
                 }
-            } else if tag == 0xFFF6_0000_0000_0000 {
+            } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
                 // Object
                 out.push('{');
                 let payload = val & 0x0000_FFFF_FFFF_FFFF;

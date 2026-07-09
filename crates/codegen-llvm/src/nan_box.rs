@@ -130,6 +130,42 @@ impl<'ctx> NanBoxHelper<'ctx> {
         builder.build_or(is_obj_or_closure, is_gen_or_array, "is_heap_ptr").unwrap()
     }
 
+    pub fn is_any_managed_pointer(&self, builder: &Builder<'ctx>, v: IntValue<'ctx>) -> IntValue<'ctx> {
+        let shifted = builder
+            .build_right_shift(v, self.i64_ty.const_int(48, false), false, "t16")
+            .unwrap();
+            
+        // Shared tags
+        let tag_obj = self.i64_ty.const_int(0xFFF6, false);
+        let tag_closure = self.i64_ty.const_int(0xFFF9, false);
+        let tag_gen = self.i64_ty.const_int(0xFFFA, false);
+        let tag_array = self.i64_ty.const_int(0xFFFB, false);
+        // Owned tags
+        let tag_owned_obj = self.i64_ty.const_int(0x7FFC, false);
+        let tag_owned_closure = self.i64_ty.const_int(0x7FF9, false);
+        let tag_owned_array = self.i64_ty.const_int(0x7FFB, false);
+        let tag_owned_str = self.i64_ty.const_int(0x7FF7, false);
+
+        let t1 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_obj, "eq1").unwrap();
+        let t2 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_closure, "eq2").unwrap();
+        let t3 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_gen, "eq3").unwrap();
+        let t4 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_array, "eq4").unwrap();
+        let t5 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_owned_obj, "eq5").unwrap();
+        let t6 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_owned_closure, "eq6").unwrap();
+        let t7 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_owned_array, "eq7").unwrap();
+        let t8 = builder.build_int_compare(IntPredicate::EQ, shifted, tag_owned_str, "eq8").unwrap();
+
+        let o1 = builder.build_or(t1, t2, "o1").unwrap();
+        let o2 = builder.build_or(t3, t4, "o2").unwrap();
+        let o3 = builder.build_or(t5, t6, "o3").unwrap();
+        let o4 = builder.build_or(t7, t8, "o4").unwrap();
+
+        let o5 = builder.build_or(o1, o2, "o5").unwrap();
+        let o6 = builder.build_or(o3, o4, "o6").unwrap();
+
+        builder.build_or(o5, o6, "is_managed").unwrap()
+    }
+
     /// Returns an `i1` that is true when `v` is a plain f64 number
     /// (i.e. upper 16 bits < TAG_MIN).
     #[allow(dead_code)]

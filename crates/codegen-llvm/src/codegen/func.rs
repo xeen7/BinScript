@@ -495,23 +495,42 @@ impl<'ctx> LlvmCodegen<'ctx> {
 
                 if self.verify_memory {
                     // Drop all JS global variables (they are stored in LLVM i64 globals)
-                    let circ_dec_fn = self.module.get_function("circ_dec_tagged").unwrap();
+                    // Use __bs_cleanup_tagged which handles both Shared and Owned tags.
+                    // IMPORTANT: Only clean up actual JS globals, not internal globals like
+                    // vtables (OBJECT_VTABLE, etc.), string constants, or class metadata,
+                    // which live in read-only memory and must NOT be written to.
+                    let cleanup_fn = self.module.get_function("__bs_cleanup_tagged").unwrap();
                     let i64_ty = self.i64_ty;
                     let mut globals_to_dec = Vec::new();
                     for global in self.module.get_globals() {
                         if global.get_value_type().is_int_type() && global.get_value_type().into_int_type() == i64_ty {
-                            globals_to_dec.push(global.as_pointer_value());
+                            let name = global.get_name().to_str().unwrap_or("");
+                            // Skip internal globals (vtables, string constants, class metadata)
+                            if name.contains("VTABLE")
+                                || name.starts_with("__bs_str_")
+                                || name.starts_with("__bs_field_")
+                                || name.starts_with(".")
+                                || global.is_constant()
+                                || (name.starts_with("__bs_class_") && !name.starts_with("__bs_class_val_"))
+                            {
+                                continue;
+                            }
+                            globals_to_dec.push(global.as_pointer_value()); println!("DEBUG_GLOBAL_DROP: {}", name);
                         }
                     }
                     for global_ptr in globals_to_dec {
                         let val = self.builder.build_load(i64_ty, global_ptr, "global_val").unwrap().into_int_value();
-                        self.builder.build_call(circ_dec_fn, &[val.into()], "dec_global").unwrap();
+                        self.builder.build_call(cleanup_fn, &[val.into()], "cleanup_global").unwrap();
                         self.builder.build_store(global_ptr, self.nan.const_undefined()).unwrap();
                     }
 
                     if let Some(check_leaks) = self.module.get_function("__bs_verify_check_leaks") {
                         self.builder.build_call(check_leaks, &[], "check_leaks").unwrap();
                     }
+                }
+
+                if let Some(print_rc) = self.module.get_function("__bs_print_rc_stats") {
+                    self.builder.build_call(print_rc, &[], "print_rc").unwrap();
                 }
 
                 self.builder

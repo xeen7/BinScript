@@ -60,8 +60,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     fn emit_circ_dec_if_heap_object(&mut self, val: inkwell::values::IntValue<'ctx>) {
-        // We need to check if the JS value is a heap object.
-        let is_obj = self.nan.is_heap_pointer(&self.builder, val);
+        // We check if the JS value is any managed pointer (Shared or Owned)
+        let is_obj = self.nan.is_any_managed_pointer(&self.builder, val);
         
         let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
         let dec_block = self.ctx.append_basic_block(current_fn, "do_dec");
@@ -71,16 +71,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
         
         self.builder.position_at_end(dec_block);
         
-        // Unbox and call circ_dec
-        let mask = self.i64_ty.const_int(0x0000_FFFF_FFFF_FFFF, false);
-        let raw_ptr_i64 = self.builder.build_and(val, mask, "unbox_ptr").unwrap();
-        let raw_ptr = self.builder.build_int_to_ptr(raw_ptr_i64, self.ptr_ty, "ptr").unwrap();
-        
-        let offset = self.i32_ty.const_int(24_u64.wrapping_neg(), true);
-        let header_ptr = unsafe { self.builder.build_in_bounds_gep(self.i8_ty, raw_ptr, &[offset], "header_ptr").unwrap() };
-        
-        let circ_dec_fn = self.funcs["circ_dec"];
-        self.builder.build_call(circ_dec_fn, &[header_ptr.into()], "call_dec").unwrap();
+        // Pass the raw tagged i64 value directly to __bs_cleanup_tagged
+        let cleanup_fn = self.funcs["__bs_cleanup_tagged"];
+        self.builder.build_call(cleanup_fn, &[val.into()], "call_cleanup").unwrap();
         
         self.builder.build_unconditional_branch(cont_block).unwrap();
         

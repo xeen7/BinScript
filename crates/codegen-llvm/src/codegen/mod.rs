@@ -175,7 +175,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             let params: Vec<BasicMetadataTypeEnum> =
                 f.params.iter().map(|_| self.i64_ty.into()).collect();
             let ft = self.i64_ty.fn_type(&params, false);
-            let fv = self.module.add_function(&f.name, ft, None);
+            let fv = self.module.add_function(&f.name, ft, Some(inkwell::module::Linkage::Internal));
             self.funcs.insert(f.name.clone(), fv);
         }
 
@@ -235,6 +235,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_alloc_owned", self.i64_ty.fn_type(&[self.ptr_ty.into(), self.i64_ty.into()], false));
         // void __bs_free_owned(ptr obj_ptr)
         add(self, "__bs_free_owned", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
+        // void __bs_drop_owned(ptr obj_ptr)
+        add(self, "__bs_drop_owned", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
         // void circ_inc(ptr header)
         add(self, "circ_inc", self.void_ty.fn_type(&[self.ptr_ty.into()], false));
         // void circ_dec(ptr header)
@@ -275,6 +277,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_instanceof", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         // ptr __bs_alloc_closure(i64 size_in_bytes) -> i64
         add(self, "__bs_alloc_closure", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
+        add(self, "__bs_alloc_owned_closure", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
         // void circ_dec_tagged(i64)
         add(self, "circ_dec_tagged", self.void_ty.fn_type(&[self.i64_ty.into()], false));
         // void circ_inc_tagged(i64)
@@ -324,6 +327,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_index_get", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         add(self, "__bs_index_set", self.void_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into(), self.i64_ty.into()], false));
         add(self, "__bs_array_new", self.i64_ty.fn_type(&[], false));
+        add(self, "__bs_alloc_array", self.i64_ty.fn_type(&[], false));
+        add(self, "__bs_alloc_owned_array", self.i64_ty.fn_type(&[], false));
+        add(self, "__bs_alloc_arena_array", self.i64_ty.fn_type(&[self.ptr_ty.into()], false));
         add(self, "__bs_array_push", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         add(self, "__bs_array_push_spread", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         add(self, "__bs_object_spread", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
@@ -351,6 +357,10 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_math_trunc", math_unary);
 
         // Global Helpers
+        add(self, "__bs_generator_next", self.i64_ty.fn_type(&[self.ptr_ty.into(), self.i64_ty.into()], false));
+        add(self, "__bs_generator_is_done", self.i32_ty.fn_type(&[self.ptr_ty.into()], false));
+        add(self, "__bs_print_rc_stats", self.void_ty.fn_type(&[], false));
+        add(self, "__bs_cleanup_tagged", self.void_ty.fn_type(&[self.i64_ty.into()], false));
         add(self, "__bs_parseInt", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         add(self, "__bs_parseInt_1", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
         add(self, "__bs_parseInt_2", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
@@ -604,8 +614,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 (self.i64_ty.const_int(0xFFF4, false), print_bool_t),
                 (self.i64_ty.const_int(0xFFF6, false), print_obj),
                 (self.i64_ty.const_int(0xFFF7, false), print_str),
+                (self.i64_ty.const_int(0x7FF7, false), print_str),
                 (self.i64_ty.const_int(0xFFF8, false), print_symbol),
                 (self.i64_ty.const_int(0xFFF9, false), print_closure),
+                (self.i64_ty.const_int(0x7FF9, false), print_closure),
+                (self.i64_ty.const_int(0x7FFC, false), print_obj),
+                (self.i64_ty.const_int(0xFFFE, false), print_obj),
             ],
         ).unwrap();
 

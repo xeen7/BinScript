@@ -10,6 +10,7 @@ use std::sync::atomic::Ordering;
 /// NaN-boxing tag for object: TAG_OBJECT = 0xFFF6_0000_0000_0000.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_alloc(vtable_ptr: *const VTable, size_in_bytes: usize) -> u64 {
+    println!("ALLOC_OBJECT: {:?}", vtable_ptr);
     let total_size = CircHeader::SIZE + size_in_bytes;
 
     let (raw, alloc_size) = crate::slab::fast_alloc_shared(total_size);
@@ -30,10 +31,19 @@ pub unsafe extern "C-unwind" fn __bs_alloc(vtable_ptr: *const VTable, size_in_by
     let vtable_slot = obj_ptr as *mut *const VTable;
     *vtable_slot = vtable_ptr;
     
+    // Initialize inline properties slot at offset 8 to null
+    let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+    *props_slot = std::ptr::null_mut();
+
     crate::verify::__bs_verify_track_alloc(obj_ptr);
+    crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
+    println!("Allocated Shared Closure: {:p}", obj_ptr);
 
     // Return as NaN-boxed Object pointer (points to obj data, NOT header)
-    (obj_ptr as u64) | 0xFFF6_0000_0000_0000
+    {
+        println!("Allocated Shared Object: {:p}", obj_ptr);
+        (obj_ptr as u64) | 0xFFF6_0000_0000_0000
+    }
 }
 
 #[no_mangle]
@@ -58,10 +68,19 @@ pub unsafe extern "C-unwind" fn __bs_alloc_acyclic(vtable_ptr: *const VTable, si
     let vtable_slot = obj_ptr as *mut *const VTable;
     *vtable_slot = vtable_ptr;
 
+    // Initialize inline properties slot at offset 8 to null
+    let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+    *props_slot = std::ptr::null_mut();
+
     crate::verify::__bs_verify_track_alloc(obj_ptr);
+    crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
+    println!("Allocated Shared Closure: {:p}", obj_ptr);
 
     // Return as NaN-boxed Object pointer (points to obj data, NOT header)
-    (obj_ptr as u64) | 0xFFF6_0000_0000_0000
+    {
+        println!("Allocated Shared Object: {:p}", obj_ptr);
+        (obj_ptr as u64) | 0xFFF6_0000_0000_0000
+    }
 }
 
 /// Allocates memory for a class object of size_in_bytes, zero-initializes it,
@@ -73,38 +92,50 @@ pub unsafe extern "C-unwind" fn __bs_alloc_acyclic(vtable_ptr: *const VTable, si
 /// NaN-boxing tag for owned object: TAG_OWNED_OBJECT = 0xFFFC_0000_0000_0000.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_alloc_owned(vtable_ptr: *const VTable, size_in_bytes: usize) -> u64 {
-    // We use the same fast allocator as Shared objects, but we don't prepend a CircHeader
-    let (raw, _alloc_size) = crate::slab::fast_alloc_shared(size_in_bytes);
+    let total_size = CircHeader::SIZE + size_in_bytes;
+    let (raw, alloc_size) = crate::slab::fast_alloc_shared(total_size);
+    let header = raw as *mut CircHeader;
+    
+    (*header).local_rc = 0;
+    (*header).global_rc.store(0, Ordering::Relaxed);
+    (*header).owner_tid.store(crate::circ::NO_OWNER, Ordering::Relaxed);
+    (*header).flags.store(crate::circ::VTABLE_PTR, Ordering::Relaxed);
+    (*header).alloc_size = alloc_size;
+    (*header).crc = 0;
 
-    let obj_ptr = raw as *mut u8;
+    let obj_ptr = (raw as *mut u8).add(CircHeader::SIZE);
 
     // Store vtable pointer at offset 0 of the object
     let vtable_slot = obj_ptr as *mut *const VTable;
     *vtable_slot = vtable_ptr;
 
+    // Initialize inline properties slot at offset 8 to null
+    let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+    *props_slot = std::ptr::null_mut();
+    
+    // Increment owned stats
+    crate::circ::OWNED_ALLOCS.fetch_add(1, Ordering::Relaxed);
+
+    #[cfg(feature = "debug_rc")]
+    {
+        println!("Allocated Owned Object: {:?}", obj_ptr);
+    }
+
     crate::verify::__bs_verify_track_alloc(obj_ptr);
+    
 
     // Return as NaN-boxed Owned Object pointer
-    (obj_ptr as u64) | 0xFFFC_0000_0000_0000
+    {
+        println!("Allocated Owned Object: {:p}", obj_ptr);
+        (obj_ptr as u64) | 0xFFFC_0000_0000_0000
+    }
 }
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_free_owned(obj_ptr: *mut u8) {
-    if obj_ptr.is_null() { return; }
-    
-    let vtable_ptr = *(obj_ptr as *mut *const VTable);
-    if vtable_ptr.is_null() { return; }
-    
-    let fields_count = (*vtable_ptr).fields_count as usize;
-    let size_in_bytes = 8 * (2 + fields_count);
-    
-    let alloc_size = if size_in_bytes <= 32 { 32 } 
-                     else if size_in_bytes <= 64 { 64 } 
-                     else if size_in_bytes <= 128 { 128 } 
-                     else if size_in_bytes <= 256 { 256 } 
-                     else { 0 };
-                     
-    crate::slab::fast_free_shared(obj_ptr, alloc_size);
+    if obj_ptr.is_null() { return; } eprintln!("__bs_drop_owned: {:?}", obj_ptr);
+    let header = obj_ptr.sub(CircHeader::SIZE) as *mut CircHeader;
+    crate::circ::circ_destroy(header);
 }
 
 /// Allocates memory for a closure env of size_in_bytes, zero-initializes it,
@@ -117,18 +148,60 @@ pub unsafe extern "C-unwind" fn __bs_alloc_closure(size_in_bytes: usize) -> u64 
 
     let (raw, alloc_size) = crate::slab::fast_alloc_shared(total_size);
 
-    let header = raw as *mut CircHeader;
+    let header = raw as *mut crate::circ::CircHeader;
+    let tid = crate::circ::current_thread_id();
+    let flags = crate::circ::IS_CLOSURE;
     (*header).local_rc = 1;
+    (*header).global_rc.store(0, std::sync::atomic::Ordering::Relaxed);
+    (*header).owner_tid.store(tid, std::sync::atomic::Ordering::Relaxed);
+    (*header).flags.store(flags, std::sync::atomic::Ordering::Relaxed);
+    (*header).alloc_size = alloc_size;
+    (*header).crc = 0;
+
+    let obj_ptr = (raw as *mut u8).add(crate::circ::CircHeader::SIZE);
+    
+    std::ptr::write_bytes(obj_ptr, 0, size_in_bytes);
+    crate::verify::__bs_verify_track_alloc(obj_ptr);
+    crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
+    println!("Allocated Shared Closure: {:p}", obj_ptr);
+    {
+        println!("Allocated Closure: {:p}", obj_ptr);
+        (obj_ptr as u64) | 0xFFF9_0000_0000_0000
+    }
+}
+
+/// Allocates an owned closure in the heap. Returns a TAG_OWNED tagged pointer.
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_alloc_owned_closure(size_in_bytes: usize) -> u64 {
+    let total_size = CircHeader::SIZE + size_in_bytes;
+    let (raw, alloc_size) = crate::slab::fast_alloc_shared(total_size);
+    let header = raw as *mut CircHeader;
+    
+    (*header).local_rc = 0; // Owned objects don't use RC
     (*header).global_rc.store(0, Ordering::Relaxed);
-    (*header).owner_tid.store(crate::circ::current_thread_id(), Ordering::Relaxed);
+    (*header).owner_tid.store(crate::circ::NO_OWNER, Ordering::Relaxed);
     (*header).flags.store(crate::circ::IS_CLOSURE, Ordering::Relaxed);
     (*header).alloc_size = alloc_size;
     (*header).crc = 0;
 
     let obj_ptr = (raw as *mut u8).add(CircHeader::SIZE);
-    std::ptr::write_bytes(obj_ptr, 0, size_in_bytes);
     crate::verify::__bs_verify_track_alloc(obj_ptr);
-    (obj_ptr as u64) | 0xFFF9_0000_0000_0000
+    
+    // Increment owned stats
+    crate::circ::OWNED_ALLOCS.fetch_add(1, Ordering::Relaxed);
+    
+    (obj_ptr as u64) | 0x7FF9_0000_0000_0000 // TAG_OWNED_CLOSURE
+}
+
+/// Drops an owned object by destroying its contents and freeing the memory.
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_drop_owned(obj_ptr: *mut u8) {
+    if obj_ptr.is_null() { return; } eprintln!("__bs_drop_owned: {:?}", obj_ptr);
+    
+    let header = obj_ptr.sub(CircHeader::SIZE) as *mut CircHeader;
+    
+    // For Owned objects, we destroy and free them.
+    crate::circ::circ_destroy(header);
 }
 
 /// Allocates memory for a generator state struct of size_in_bytes, zero-initializes it,
@@ -152,6 +225,8 @@ pub unsafe extern "C-unwind" fn __bs_alloc_generator(size_in_bytes: usize) -> u6
     let obj_ptr = (raw as *mut u8).add(CircHeader::SIZE);
     std::ptr::write_bytes(obj_ptr, 0, size_in_bytes);
     crate::verify::__bs_verify_track_alloc(obj_ptr);
+    crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
+    println!("Allocated Shared Closure: {:p}", obj_ptr);
     // println!("__bs_alloc_generator: {:?}", obj_ptr);
     (obj_ptr as u64) | 0xFFFA_0000_0000_0000
 }

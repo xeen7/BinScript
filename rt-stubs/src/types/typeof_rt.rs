@@ -9,18 +9,18 @@ pub unsafe extern "C-unwind" fn __bs_typeof(val: u64) -> u64 {
         "object" // null
     } else if tag == 0xFFF3_0000_0000_0000 || tag == 0xFFF4_0000_0000_0000 {
         "boolean"
-    } else if tag == 0xFFF7_0000_0000_0000 {
+    } else if tag == 0xFFF7_0000_0000_0000 || tag == 0x7FF7_0000_0000_0000 {
         "string"
     } else if tag == 0xFFF8_0000_0000_0000 {
         "symbol"
-    } else if tag == 0xFFF9_0000_0000_0000 {
+    } else if tag == 0xFFF9_0000_0000_0000 || tag == 0x7FF9_0000_0000_0000 {
         "function" // closure
     } else if tag == 0xFFFA_0000_0000_0000 {
         "object" // generator
-    } else if tag == 0xFFFB_0000_0000_0000 {
+    } else if tag == 0xFFFB_0000_0000_0000 || tag == 0x7FFB_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 {
         "object" // array
-    } else if tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFD_0000_0000_0000 {
-        "object" // promise
+    } else if (tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000) || tag == 0xFFFD_0000_0000_0000 {
+        "object" // object, arena, promise
     } else if tag == 0xFFF6_0000_0000_0000 {
         // object or class instance
         "object"

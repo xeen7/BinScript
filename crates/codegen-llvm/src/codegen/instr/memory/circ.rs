@@ -117,34 +117,28 @@ impl<'ctx> LlvmCodegen<'ctx> {
             let tag = self.builder.build_right_shift(val, shift, false, "rc_tag").unwrap();
             
             let tag_owned = self.i64_ty.const_int(0xFFFC, false);
-            let is_owned = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_owned, "is_owned").unwrap();
+            let tag_owned_closure = self.i64_ty.const_int(0x7FF9, false);
+            let tag_owned_array = self.i64_ty.const_int(0x7FFB, false);
+            let tag_owned_string = self.i64_ty.const_int(0x7FF7, false);
             
-            let tag_obj = self.i64_ty.const_int(0xFFF6, false);
-            let is_obj = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_obj, "is_obj").unwrap();
-            let tag_closure = self.i64_ty.const_int(0xFFF9, false);
-            let is_closure = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_closure, "is_closure").unwrap();
-            let tag_gen = self.i64_ty.const_int(0xFFFA, false);
-            let is_gen = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_gen, "is_gen").unwrap();
-            let tag_array = self.i64_ty.const_int(0xFFFB, false);
-            let is_array = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_array, "is_array").unwrap();
+            let is_owned_obj = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_owned, "is_owned_obj").unwrap();
+            let is_owned_clo = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_owned_closure, "is_owned_clo").unwrap();
+            let is_owned_arr = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_owned_array, "is_owned_arr").unwrap();
+            let is_owned_str = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_owned_string, "is_owned_str").unwrap();
             
-            let is_shared1 = self.builder.build_or(is_obj, is_closure, "is_shared1").unwrap();
-            let is_shared2 = self.builder.build_or(is_gen, is_array, "is_shared2").unwrap();
-            let is_shared = self.builder.build_or(is_shared1, is_shared2, "is_shared").unwrap();
+            let is_owned_1 = self.builder.build_or(is_owned_obj, is_owned_clo, "is_owned_1").unwrap();
+            let is_owned_2 = self.builder.build_or(is_owned_arr, is_owned_str, "is_owned_2").unwrap();
+            let is_owned = self.builder.build_or(is_owned_1, is_owned_2, "is_owned").unwrap();
+            
+            // We removed the is_shared check since we strictly only act on is_owned
 
             let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
             let owned_block = self.ctx.append_basic_block(current_fn, "drop_owned");
-            let shared_block = self.ctx.append_basic_block(current_fn, "drop_shared");
             let cont_block = self.ctx.append_basic_block(current_fn, "drop_cont");
             
             // If owned -> owned_block
-            // Else if shared -> shared_block
             // Else -> cont_block
-            let else_block = self.ctx.append_basic_block(current_fn, "drop_check_shared");
-            self.builder.build_conditional_branch(is_owned, owned_block, else_block).unwrap();
-            
-            self.builder.position_at_end(else_block);
-            self.builder.build_conditional_branch(is_shared, shared_block, cont_block).unwrap();
+            self.builder.build_conditional_branch(is_owned, owned_block, cont_block).unwrap();
             
             // --- drop_owned ---
             self.builder.position_at_end(owned_block);
@@ -152,35 +146,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
             let raw_ptr_i64 = self.builder.build_and(val, mask, "unbox_ptr").unwrap();
             let raw_ptr = self.builder.build_int_to_ptr(raw_ptr_i64, self.ptr_ty, "ptr").unwrap();
             
-            let vtable_ptr = self.builder.build_load(self.ptr_ty, raw_ptr, "vtable_ptr").unwrap().into_pointer_value();
-            let drop_fn_offset = self.i32_ty.const_int(40, false);
-            let drop_fn_ptr_ptr = unsafe { self.builder.build_in_bounds_gep(self.i8_ty, vtable_ptr, &[drop_fn_offset], "drop_fn_ptr_ptr").unwrap() };
-            let drop_fn_ptr = self.builder.build_load(self.ptr_ty, drop_fn_ptr_ptr, "drop_fn_ptr").unwrap().into_pointer_value();
+            let drop_owned_fn = self.funcs["__bs_drop_owned"];
+            self.builder.build_call(drop_owned_fn, &[raw_ptr.into()], "call_drop_owned").unwrap();
             
-            let is_not_null = self.builder.build_is_not_null(drop_fn_ptr, "drop_not_null").unwrap();
-            let do_drop_block = self.ctx.append_basic_block(current_fn, "do_drop");
-            let after_drop_block = self.ctx.append_basic_block(current_fn, "after_drop");
-            self.builder.build_conditional_branch(is_not_null, do_drop_block, after_drop_block).unwrap();
-            
-            self.builder.position_at_end(do_drop_block);
-            let drop_fn_type = self.void_ty.fn_type(&[self.ptr_ty.into()], false);
-            self.builder.build_indirect_call(drop_fn_type, drop_fn_ptr, &[raw_ptr.into()], "call_drop_fn").unwrap();
-            self.builder.build_unconditional_branch(after_drop_block).unwrap();
-            
-            self.builder.position_at_end(after_drop_block);
-            let free_fn = self.funcs["__bs_free_owned"];
-            self.builder.build_call(free_fn, &[raw_ptr.into()], "call_free_owned").unwrap();
-            self.builder.build_unconditional_branch(cont_block).unwrap();
-
-            // --- drop_shared ---
-            self.builder.position_at_end(shared_block);
-            let raw_ptr_i64_shared = self.builder.build_and(val, mask, "unbox_ptr").unwrap();
-            let raw_ptr_shared = self.builder.build_int_to_ptr(raw_ptr_i64_shared, self.ptr_ty, "ptr").unwrap();
-            // Header is at offset -24
-            let offset = self.i32_ty.const_int(-24_i64 as u64, true);
-            let header_ptr = unsafe { self.builder.build_in_bounds_gep(self.i8_ty, raw_ptr_shared, &[offset], "header_ptr").unwrap() };
-            let dec_fn = self.funcs["circ_dec"];
-            self.builder.build_call(dec_fn, &[header_ptr.into()], "call_circ_dec").unwrap();
             self.builder.build_unconditional_branch(cont_block).unwrap();
 
             // --- cont_block ---
@@ -254,6 +222,16 @@ impl<'ctx> LlvmCodegen<'ctx> {
             
             // Note: Since Ownership Inference already injects RcInc and RcDec
             // around the old/new values respectively, we don't need to do it here.
+        }
+        Ok(())
+    }
+
+    pub(in crate::codegen::instr) fn emit_instr_force_owned_tag(&mut self, instr: &mir::MirInstr) -> CompileResult<()> {
+        if let mir::MirInstr::ForceOwnedTag(reg) = instr {
+            let val = self.val(&mir::MirOperand::Reg(*reg))?;
+            let mask = self.i64_ty.const_int(0x7FFF_FFFF_FFFF_FFFF, false);
+            let new_val = self.builder.build_and(val, mask, "force_owned_tag").unwrap();
+            self.store(*reg, new_val);
         }
         Ok(())
     }

@@ -125,7 +125,7 @@ pub unsafe extern "C-unwind" fn __bs_parseFloat(s_tagged: u64) -> u64 {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_isNaN(x: u64) -> u64 {
     let tag = x & TAG_MASK;
-    if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
+    if crate::dynamic_call::helpers::is_number_tag(tag) {
         let f = f64::from_bits(x);
         crate::circ::box_boolean(f.is_nan())
     } else if tag == TAG_STRING {
@@ -143,7 +143,7 @@ pub unsafe extern "C-unwind" fn __bs_isNaN(x: u64) -> u64 {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_isFinite(x: u64) -> u64 {
     let tag = x & TAG_MASK;
-    if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
+    if crate::dynamic_call::helpers::is_number_tag(tag) {
         let f = f64::from_bits(x);
         crate::circ::box_boolean(f.is_finite())
     } else {

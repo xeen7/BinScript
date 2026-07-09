@@ -3,7 +3,7 @@ use crate::dynamic_call::helpers::*;
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_index_get(obj: u64, index: u64) -> u64 {
     let tag = obj & TAG_MASK;
-    if tag == TAG_ARRAY {
+    if tag == TAG_ARRAY || tag == 0x7FFB_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 {
         crate::array::__bs_array_get(obj, index)
     } else {
         let prop_name = value_to_string(index);
@@ -15,7 +15,7 @@ pub unsafe extern "C-unwind" fn __bs_index_get(obj: u64, index: u64) -> u64 {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_index_set(obj: u64, index: u64, val: u64) {
     let tag = obj & TAG_MASK;
-    if tag == TAG_ARRAY {
+    if tag == TAG_ARRAY || tag == 0x7FFB_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 {
         crate::array::__bs_array_set(obj, index, val);
     } else {
         let prop_name = value_to_string(index);

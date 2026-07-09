@@ -89,7 +89,7 @@ unsafe fn print_exception(val: u64) {
         } else {
             eprintln!("Unhandled Exception: [null object]");
         }
-    } else if tag == 0 || (tag > 0 && tag < 0xFFF0_0000_0000_0000) {
+    } else if crate::dynamic_call::helpers::is_number_tag(tag) {
         eprintln!("Unhandled Exception: {}", f64::from_bits(val));
     } else if tag == 0xFFF3_0000_0000_0000 {
         eprintln!("Unhandled Exception: false");

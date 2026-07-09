@@ -1,0 +1,65 @@
+--- rt-stubs/src/json/tape.rs
++++ rt-stubs/src/json/tape.rs
+@@ -141,7 +141,18 @@
+         return 0xFFF1_0000_0000_0000; // undefined
+     }
+ 
+-    if tag == 0xFFF6_0000_0000_0000 {
++    let is_object = if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
++        true
++    } else if tag == 0xFFFC_0000_0000_0000 {
++        unsafe {
++            let header = obj_ptr.sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++            let flags = (*header).flags.load(std::sync::atomic::Ordering::Relaxed);
++            (flags & crate::circ::VTABLE_PTR) != 0
++        }
++    } else {
++        false
++    };
++
++    if is_object {
+         let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+         if let Some(val) = crate::objects::dynamic_props::get_inline_property(props_slot, prop_name.to_string()) {
+             return val;
+@@ -275,7 +286,18 @@
+ 
+     // 2. Otherwise set as inline property
+     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
+-        if tag == 0xFFF6_0000_0000_0000 {
++        let is_object = if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
++            true
++        } else if tag == 0xFFFC_0000_0000_0000 {
++            unsafe {
++                let header = obj_ptr.sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++                let flags = (*header).flags.load(std::sync::atomic::Ordering::Relaxed);
++                (flags & crate::circ::VTABLE_PTR) != 0
++            }
++        } else {
++            false
++        };
++        
++        if is_object {
+             let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+             crate::objects::dynamic_props::set_inline_property(props_slot, prop_name.to_string(), val_tagged);
+         } else {
+@@ -326,7 +348,18 @@
+ 
+     // 2. Otherwise set as inline property
+     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
+-        if tag == 0xFFF6_0000_0000_0000 {
++        let is_object = if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
++            true
++        } else if tag == 0xFFFC_0000_0000_0000 {
++            unsafe {
++                let header = obj_ptr.sub(crate::circ::CircHeader::SIZE) as *const crate::circ::CircHeader;
++                let flags = (*header).flags.load(std::sync::atomic::Ordering::Relaxed);
++                (flags & crate::circ::VTABLE_PTR) != 0
++            }
++        } else {
++            false
++        };
++
++        if is_object {
+             let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
+             crate::objects::dynamic_props::set_inline_property(props_slot, prop_name.to_string(), val_tagged);
+         } else {

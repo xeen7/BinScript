@@ -61,6 +61,9 @@ impl<'a> LowerCtx<'a> {
                     } else {
                         "__bs_parseInt_2".to_string()
                     }
+                } else if name == "__bs_new_object" {
+                    self.emit(MirInstr::Alloc(dest, "Object".to_string()));
+                    return Ok(MirOperand::Reg(dest));
                 } else {
                     self.func_names
                         .get(name)

@@ -29,7 +29,7 @@ pub unsafe extern "C-unwind" fn __bs_Object_new_1(val: u64) -> u64 {
 pub unsafe extern "C-unwind" fn __bs_object_keys(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -65,7 +65,8 @@ pub unsafe extern "C-unwind" fn __bs_object_keys(obj: u64) -> u64 {
             }
         }
     }
-    array
+    // Return as TAG_OWNED_ARRAY so the compiler drops it properly
+    (array & 0x0000_FFFF_FFFF_FFFF) | 0x7FFB_0000_0000_0000
 }
 
 #[no_mangle]
@@ -89,7 +90,7 @@ pub unsafe extern "C-unwind" fn __bs_object_rest(obj: u64, excluded_arr: u64) ->
     let mut props_to_copy = Vec::new();
 
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -144,7 +145,7 @@ pub unsafe extern "C-unwind" fn __bs_object_rest(obj: u64, excluded_arr: u64) ->
 pub unsafe extern "C-unwind" fn __bs_object_values(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -180,14 +181,15 @@ pub unsafe extern "C-unwind" fn __bs_object_values(obj: u64) -> u64 {
             }
         }
     }
-    array
+    // Return as TAG_OWNED_ARRAY so the compiler drops it properly
+    (array & 0x0000_FFFF_FFFF_FFFF) | 0x7FFB_0000_0000_0000
 }
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_object_entries(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -230,7 +232,8 @@ pub unsafe extern "C-unwind" fn __bs_object_entries(obj: u64) -> u64 {
             }
         }
     }
-    array
+    // Return as TAG_OWNED_ARRAY so the compiler drops it properly
+    (array & 0x0000_FFFF_FFFF_FFFF) | 0x7FFB_0000_0000_0000
 }
 
 #[no_mangle]
@@ -282,13 +285,14 @@ pub unsafe extern "C-unwind" fn __bs_object_create(proto: u64) -> u64 {
     let obj = __bs_new_object();
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
     set_dynamic_property(payload as *mut u8, "__proto__".to_string(), proto);
-    obj
+    // Return as TAG_OWNED_OBJECT so the compiler drops it properly
+    payload | 0xFFFC_0000_0000_0000
 }
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_object_getPrototypeOf(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         if let Some(proto) = get_dynamic_property(obj_ptr, "__proto__") {

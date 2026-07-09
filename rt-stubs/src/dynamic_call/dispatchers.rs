@@ -1,4 +1,4 @@
-use crate::dynamic_call::helpers::{TAG_MASK, TAG_ARRAY, TAG_STRING, TAG_OBJECT, PAYLOAD_MASK};
+use crate::dynamic_call::helpers::{TAG_MASK, TAG_ARRAY, TAG_STRING, TAG_OBJECT, TAG_OWNED, TAG_ARENA, PAYLOAD_MASK};
 
 
 // Wrapper for forEach because it returns void

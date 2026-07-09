@@ -1,0 +1,11 @@
+--- rt-stubs/src/objects/builtins/object.rs
++++ rt-stubs/src/objects/builtins/object.rs
+@@ -31,6 +31,8 @@
+ pub unsafe extern "C-unwind" fn __bs_object_keys(obj: u64) -> u64 {
+     let tag = obj & 0xFFFF_0000_0000_0000;
+     let array = crate::array::__bs_array_new();
++    libc::printf("DEBUG: __bs_object_keys tag: %lx\n\0".as_ptr() as *const libc::c_char, tag);
+     if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
++        libc::printf("DEBUG: __bs_object_keys inside if\n\0".as_ptr() as *const libc::c_char);
+         if payload != 0 {

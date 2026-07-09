@@ -34,17 +34,25 @@ impl AliasGraph {
         self.graph.add_edge(src, dest, kind);
     }
 
-    /// Returns true if `reg` has multiple incoming Store/Alias edges
+    /// Returns true if `reg` has multiple outgoing Store/Alias edges
     /// from distinct live scopes — meaning it is aliased.
     pub fn is_aliased(&self, reg: MirReg) -> bool {
-        self.graph.neighbors_directed(reg, petgraph::Direction::Incoming)
-            .filter(|&src| {
+        self.graph.neighbors_directed(reg, petgraph::Direction::Outgoing)
+            .filter(|&dest| {
                 matches!(
-                    self.graph.edge_weight(src, reg),
-                    Some(AliasKind::Store | AliasKind::Alias)
+                    self.graph.edge_weight(reg, dest),
+                    Some(AliasKind::Store | AliasKind::Alias | AliasKind::Clone)
                 )
             })
             .count() > 1
+    }
+
+    /// Returns registers that this register borrows from.
+    pub fn get_borrow_origins(&self, dest: MirReg) -> Vec<MirReg> {
+        self.graph.edges_directed(dest, petgraph::Direction::Incoming)
+            .filter(|&(_, _, kind)| *kind == AliasKind::Borrow)
+            .map(|(src, _, _)| src)
+            .collect()
     }
 }
 
@@ -68,7 +76,7 @@ pub fn build_alias_graph(func: &MirFunction) -> AliasGraph {
                 }
                 MirInstr::LoadField(dest, obj, _) |
                 MirInstr::LoadProp(dest, obj, _) => {
-                    ag.add_edge(*obj, *dest, AliasKind::Alias);
+                    ag.add_edge(*obj, *dest, AliasKind::Borrow);
                 }
                 MirInstr::AllocClosure(dest, _, captures) => {
                     for cap in captures {

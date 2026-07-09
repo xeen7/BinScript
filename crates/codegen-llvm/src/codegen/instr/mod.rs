@@ -49,11 +49,11 @@ impl<'ctx> LlvmCodegen<'ctx> {
             MirInstr::LoadProp(..) => self.emit_instr_load_prop(instr)?,
             MirInstr::StoreProp(..) => self.emit_instr_store_prop(instr)?,
             MirInstr::DeleteProp(..) => self.emit_instr_delete_prop(instr)?,
-            MirInstr::CallDirect(..) => self.emit_instr_call_direct(instr)?,
+            MirInstr::CallDirect(..) | MirInstr::CallPure(..) => self.emit_instr_call_direct(instr)?,
             MirInstr::CallBuiltin(..) => self.emit_instr_call_builtin(instr)?,
             MirInstr::CallVTable(..) => self.emit_instr_call_vtable(instr)?,
             MirInstr::CallClosure(..) => self.emit_instr_call_closure(instr)?,
-            MirInstr::AllocClosure(..) => self.emit_instr_alloc_closure(instr)?,
+            MirInstr::AllocClosure(..) | MirInstr::AllocSharedClosure(..) | MirInstr::AllocOwnedClosure(..) => self.emit_instr_alloc_closure(instr)?,
             MirInstr::Branch(..) => self.emit_instr_branch(instr)?,
             MirInstr::Jump(..) => self.emit_instr_jump(instr)?,
             MirInstr::Return(..) => self.emit_instr_return_op(instr)?,
@@ -83,6 +83,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             MirInstr::ScopeGuardPush { scope_id, reg, release_fn } => self.emit_instr_scope_guard_push(*scope_id, *reg, release_fn)?,
             MirInstr::ScopeGuardCancel { scope_id, reg } => self.emit_instr_scope_guard_cancel(*scope_id, *reg)?,
             MirInstr::ScopeGuardFlushTo { current_scope: _, target_scope } => self.emit_instr_scope_guard_flush_to(*target_scope)?,
+            MirInstr::ForceOwnedTag(..) => self.emit_instr_force_owned_tag(instr)?,
         }
         Ok(())
     }

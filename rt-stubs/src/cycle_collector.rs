@@ -60,6 +60,7 @@ pub fn push_to_global_queue(batch: &mut Vec<*mut CircHeader>) {
 
 #[no_mangle]
 pub extern "C-unwind" fn __bs_cycle_collector_flush() {
+    eprintln!("__bs_cycle_collector_flush called");
     let (lock, cvar) = &**COLLECTOR_STATE;
     cvar.notify_one();
     let mut state_guard = lock.lock().unwrap();
@@ -86,12 +87,12 @@ fn collect_cycles(candidates: Vec<CircPtr>) {
             if !candidate.is_null() {
                 let header = &*candidate;
                 let rc = total_rc(header);
-                // println!("phase_0: {:?}, color={}, rc={}", candidate, header.get_color(), rc);
+                println!("phase_0: {:?}, color={}, rc={}", candidate, header.get_color(), rc);
                 if rc == 0 {
-                    // println!("phase_0: freeing rc=0");
+                    println!("phase_0: freeing rc=0");
                     crate::circ::circ_destroy(candidate);
                 } else {
-                    // println!("phase_0: pushing to actual_candidates");
+                    println!("phase_0: pushing to actual_candidates");
                     actual_candidates.push(candidate_ptr);
                 }
             }
@@ -146,7 +147,7 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
         t_fn(obj_ptr, visitor);
     }
     
-    let mut children = Vec::new();
+    
     
     // Trace dynamic properties
     {
@@ -168,7 +169,8 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
                     if !raw_ptr.is_null() {
                         let child = raw_ptr.sub(CircHeader::SIZE) as *mut CircHeader;
                         // // println!("  trace dynamic prop {}: {:?}", name, child);
-                        children.push(child);
+                        let visitor_fn: unsafe extern "C-unwind" fn(*mut CircHeader) = std::mem::transmute(visitor);
+                        visitor_fn(child);
                     }
                 }
             }
@@ -189,7 +191,8 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
                     if !raw_ptr.is_null() {
                         let child = raw_ptr.sub(CircHeader::SIZE) as *mut CircHeader;
                         // println!("  trace inline prop {}: {:?}", name, child);
-                        children.push(child);
+                        let visitor_fn: unsafe extern "C-unwind" fn(*mut CircHeader) = std::mem::transmute(visitor);
+                        visitor_fn(child);
                     }
                 }
             }
@@ -197,10 +200,6 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
         }
     }
     
-    for child in children {
-        let visitor_fn: unsafe extern "C-unwind" fn(*mut CircHeader) = std::mem::transmute(visitor);
-        visitor_fn(child);
-    }
 }
 
 // Bacon-Rajan Mark Gray: count virtual decrements using in-place `crc` field
@@ -297,25 +296,38 @@ unsafe extern "C-unwind" fn scan_black_visitor(header_ptr: *mut CircHeader) {
 // calls circ_dec on children whose RC counts are for live objects.
 // Instead, we recursively collect_white all children first (so they are freed
 // from the leaves inward), then free the node's memory directly.
+
+unsafe extern "C-unwind" fn decrement_black_visitor(child_header_ptr: *mut CircHeader) {
+    if child_header_ptr.is_null() { return; }
+    let child_header = &mut *child_header_ptr;
+    let color = child_header.get_color();
+    if color != COLOR_WHITE && color != crate::circ::COLOR_FREEING {
+        crate::circ::circ_dec(child_header_ptr);
+    }
+}
+
 unsafe fn collect_white(s: *mut CircHeader) {
     if s.is_null() { return; }
     let header = &*s;
-    // // println!("collect_white: {:?}, color={}, is_buffered={}", s, header.get_color(), header.is_buffered());
     if header.get_color() == COLOR_WHITE && !header.is_buffered() {
-        header.set_color(COLOR_BLACK); // prevent double-visit
-        // // println!("collect_white freeing: {:?}", s);
+        header.set_color(crate::circ::COLOR_FREEING); // prevent double-visit
 
-        // Recurse into children FIRST so they are collected before us
+        // First, decrement RC of external children before freeing this object.
+        // We do this BEFORE recursing to collect_white_visitor, because if we
+        // recurse first, the children might be freed, and then we'd read their
+        // memory here to check their color, resulting in use-after-free.
+        invoke_trace_fns(s, decrement_black_visitor as *const ());
+
+        // Now recurse into white children so they are collected
         invoke_trace_fns(s, collect_white_visitor as *const ());
 
-        // Now free this node directly — skip drop_fn to avoid RC side effects
         let obj_ptr = (s as *mut u8).add(CircHeader::SIZE);
         
         // Free inline property map
         let flags = (*s).flags.load(std::sync::atomic::Ordering::Relaxed);
         if (flags & crate::circ::VTABLE_PTR) != 0 {
             let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
-            crate::objects::dynamic_props::free_inline_properties(props_slot);
+            crate::objects::dynamic_props::free_inline_properties_only(props_slot);
             
             // Map/Set/WeakMap/WeakSet have no trace_fn but have a drop_fn that MUST be called
             // to clean up external memory (MAP_DATA, SET_DATA).
@@ -339,7 +351,7 @@ unsafe fn collect_white(s: *mut CircHeader) {
             crate::array::free_array_buffer_only(obj_ptr);
         }
         
-        crate::objects::dynamic_props::remove_dynamic_properties(obj_ptr);
+        crate::objects::dynamic_props::remove_dynamic_properties_only(obj_ptr);
         crate::verify::__bs_verify_track_free(obj_ptr);
 
         let size = (*s).alloc_size;
@@ -376,7 +388,7 @@ unsafe fn get_trace_fn(header: *mut CircHeader) -> Option<extern "C-unwind" fn(*
             return Some(std::mem::transmute(trace_fn_ptr));
         }
     } else if flags & crate::circ::IS_ARRAY != 0 {
-        return Some(std::mem::transmute(crate::array::__bs_array_trace_elements as *const u8));
+        return Some(std::mem::transmute(crate::array::__bs_array_trace_elements as *const ()));
     } else if flags & crate::circ::IS_GENERATOR != 0 {
         let obj_ptr = (header as *mut u8).add(CircHeader::SIZE);
         

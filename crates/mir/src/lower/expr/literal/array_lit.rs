@@ -6,7 +6,7 @@ use crate::lower::LowerCtx;
 impl<'a> LowerCtx<'a> {
     pub(crate) fn lower_expr_array_lit(&mut self, elems: &[HirExpr]) -> CompileResult<MirOperand> {
         let dest = self.fresh_reg();
-        self.emit(MirInstr::CallDirect(dest, "__bs_array_new".to_string(), vec![]));
+        self.emit(MirInstr::Alloc(dest, "Array".to_string()));
         for elem in elems {
             if let HirExpr::Spread(inner) = elem {
                 let operand = self.lower_expr(inner)?;

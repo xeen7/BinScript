@@ -54,21 +54,21 @@ macro_rules! dispatch_0_args {
                 }
             }
             if $method_name == "toString" {
-                if tag == TAG_STRING {
+                if tag == TAG_STRING || tag == 0x7FF7_0000_0000_0000 {
                     return recv;
-                } else if tag == TAG_ARRAY {
+                } else if (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
                     return $crate::types::coercion::__bs_String(recv);
                 }
             } else if $method_name == "valueOf" {
-                if tag == TAG_STRING || tag == TAG_ARRAY {
+                if tag == TAG_STRING || tag == 0x7FF7_0000_0000_0000 || (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
                     return recv;
                 }
             }
 
-            if tag == TAG_ARRAY {
+            if (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64) -> u64 = $arr_fn;
                 f(recv)
-            } else if tag == TAG_STRING {
+            } else if tag == TAG_STRING || tag == 0x7FF7_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64) -> u64 = $str_fn;
                 f(recv)
             } else if tag == TAG_OBJECT {
@@ -130,10 +130,10 @@ macro_rules! dispatch_1_arg {
                     }
                 }
             }
-            if tag == TAG_ARRAY {
+            if (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = $arr_fn;
                 f(recv, arg1)
-            } else if tag == TAG_STRING {
+            } else if tag == TAG_STRING || tag == 0x7FF7_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64, u64) -> u64 = $str_fn;
                 f(recv, arg1)
             } else if tag == TAG_OBJECT {
@@ -184,10 +184,10 @@ macro_rules! dispatch_2_args {
                     }
                 }
             }
-            if tag == TAG_ARRAY {
+            if (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64, u64, u64) -> u64 = $arr_fn;
                 f(recv, arg1, arg2)
-            } else if tag == TAG_STRING {
+            } else if tag == TAG_STRING || tag == 0x7FF7_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64, u64, u64) -> u64 = $str_fn;
                 f(recv, arg1, arg2)
             } else if tag == TAG_OBJECT {
@@ -238,10 +238,10 @@ macro_rules! dispatch_3_args {
                     }
                 }
             }
-            if tag == TAG_ARRAY {
+            if (recv & TAG_MASK) == TAG_ARRAY || (recv & TAG_MASK) == 0x7FFB_0000_0000_0000 || (recv & TAG_MASK) == 0x7FFA_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = $arr_fn;
                 f(recv, arg1, arg2, arg3)
-            } else if tag == TAG_STRING {
+            } else if tag == TAG_STRING || tag == 0x7FF7_0000_0000_0000 {
                 let f: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = $str_fn;
                 f(recv, arg1, arg2, arg3)
             } else if tag == TAG_OBJECT {

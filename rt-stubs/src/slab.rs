@@ -23,7 +23,15 @@ impl FreeList {
                 return std::ptr::null_mut();
             }
         }
-        self.head.set(*(ptr as *mut *mut u8));
+        
+        let ptr_addr = ptr as usize;
+        if ptr_addr % 8 != 0 {
+            eprintln!("SLAB CORRUPTION DETECTED! element_size={} head={:?}", self.element_size, ptr);
+            std::process::abort();
+        }
+
+        let next = *(ptr as *const *mut u8);
+        self.head.set(next);
         ptr
     }
 
@@ -67,47 +75,49 @@ thread_local! {
 
 /// Fast thread-local allocation for CIRC objects.
 /// Returns (pointer, alloc_size). alloc_size is 0 if allocated via libc.
-#[inline(always)]
-pub unsafe fn fast_alloc_shared(size: usize) -> (*mut u8, u16) {
-    let ptr = if size <= 32 {
-        BIN_32.with(|b| b.alloc())
+#[no_mangle]
+pub unsafe extern "C-unwind" fn fast_alloc_shared(size: usize) -> (*mut u8, u16) {
+    let (ptr, alloc_size) = if size <= 32 {
+        (BIN_32.with(|b| b.alloc()), 32)
     } else if size <= 64 {
-        BIN_64.with(|b| b.alloc())
+        (BIN_64.with(|b| b.alloc()), 64)
     } else if size <= 128 {
-        BIN_128.with(|b| b.alloc())
+        (BIN_128.with(|b| b.alloc()), 128)
     } else if size <= 256 {
-        BIN_256.with(|b| b.alloc())
-    } else {
-        std::ptr::null_mut()
-    };
-
-    if !ptr.is_null() {
-        let bin_size = if size <= 32 { 32 } else if size <= 64 { 64 } else if size <= 128 { 128 } else { 256 };
-        // We must zero the memory as expected by posix_memalign and callers
-        libc::memset(ptr as *mut libc::c_void, 0, bin_size);
-        (ptr, bin_size as u16)
+        (BIN_256.with(|b| b.alloc()), 256)
     } else {
         let mut raw = std::ptr::null_mut();
         if libc::posix_memalign(&mut raw, 8, size) != 0 {
             panic!("Out of memory");
         }
-        libc::memset(raw, 0, size);
         (raw as *mut u8, 0)
+    };
+    
+    if ptr.is_null() {
+        panic!("Out of memory");
     }
+
+    let memset_size = if alloc_size == 0 { size } else { alloc_size as usize };
+    libc::memset(ptr as *mut libc::c_void, 0, memset_size);
+
+    (ptr, alloc_size as u16)
 }
 
-/// Fast thread-local deallocation for CIRC objects.
-#[inline(always)]
-pub unsafe fn fast_free_shared(ptr: *mut u8, alloc_size: u16) {
-    if alloc_size == 32 {
-        BIN_32.with(|b| b.free(ptr));
-    } else if alloc_size == 64 {
-        BIN_64.with(|b| b.free(ptr));
-    } else if alloc_size == 128 {
-        BIN_128.with(|b| b.free(ptr));
-    } else if alloc_size == 256 {
-        BIN_256.with(|b| b.free(ptr));
+#[no_mangle]
+pub unsafe extern "C-unwind" fn fast_free_shared(ptr: *mut u8, size: u16) {
+    if ptr.is_null() { return; }
+    
+    let size = if size < 32 { 32 } else { size };
+    if size <= 32 {
+        BIN_32.with(|b| b.free(ptr))
+    } else if size <= 64 {
+        BIN_64.with(|b| b.free(ptr))
+    } else if size <= 128 {
+        BIN_128.with(|b| b.free(ptr))
+    } else if size <= 256 {
+        BIN_256.with(|b| b.free(ptr))
     } else {
+        // Fallback to system free
         libc::free(ptr as *mut libc::c_void);
     }
 }
