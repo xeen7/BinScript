@@ -4,6 +4,7 @@ use std::collections::{HashSet, HashMap};
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EscapeFact {
     Return,
+    Throw,
     Store,
     Capture,
     UnknownCall,
@@ -16,6 +17,8 @@ pub struct EscapeAnalysis {
     pub facts: HashMap<MirReg, HashSet<EscapeFact>>,
     pub param_escapes: Vec<bool>,
     pub param_returns: Vec<bool>,
+    pub param_flows: Vec<Vec<usize>>,
+    pub returns_fresh_allocation: bool,
 }
 
 impl EscapeAnalysis {
@@ -24,6 +27,8 @@ impl EscapeAnalysis {
             facts: HashMap::new(),
             param_escapes: Vec::new(),
             param_returns: Vec::new(),
+            param_flows: Vec::new(),
+            returns_fresh_allocation: false,
         }
     }
 
@@ -46,7 +51,8 @@ impl EscapeAnalysis {
                 EscapeFact::Capture |
                 EscapeFact::UnknownCall |
                 EscapeFact::StoreGlobal |
-                EscapeFact::StoreExternal
+                EscapeFact::StoreExternal |
+                EscapeFact::Throw
             )),
         }
     }
@@ -63,7 +69,8 @@ pub fn run_escape_analysis(func: &MirFunction, module_ea: Option<&HashMap<String
     let mut ea = EscapeAnalysis::new(func.params.len());
 
     let mut allocations = std::collections::HashSet::new();
-    // 1. Initial seeds for local allocations
+
+    // 2. Initial facts based on instructions
     for block in &func.blocks {
         for instr in &block.instrs {
             use mir::types::MirInstr::*;
@@ -76,6 +83,24 @@ pub fn run_escape_analysis(func: &MirFunction, module_ea: Option<&HashMap<String
                     if let Some(sig) = crate::native_sigs::NativeSignature::get(target) {
                         if sig.returns_fresh_allocation {
                             is_fresh = true;
+                        }
+                    }
+                    if let Some(mod_ea) = module_ea {
+                        if let Some(target_ea) = mod_ea.get(target) {
+                            if target_ea.returns_fresh_allocation {
+                                is_fresh = true;
+                                if target.contains("closure") {
+                                    println!("DEBUG ESCAPE: target {} is fresh in module_ea!", target);
+                                }
+                            } else {
+                                if target.contains("closure") {
+                                    println!("DEBUG ESCAPE: target {} is NOT fresh in module_ea", target);
+                                }
+                            }
+                        } else {
+                            if target.contains("closure") {
+                                println!("DEBUG ESCAPE: target {} is NOT in module_ea", target);
+                            }
                         }
                     }
                     if is_fresh {
@@ -127,7 +152,7 @@ pub fn run_escape_analysis(func: &MirFunction, module_ea: Option<&HashMap<String
                     ea.mark_escape(*r, EscapeFact::Return);
                 }
                 MirInstr::Throw(MirOperand::Reg(r)) => {
-                    ea.mark_escape(*r, EscapeFact::Return);
+                    ea.mark_escape(*r, EscapeFact::Throw);
                 }
                 MirInstr::CallDirect(_, target, args) | MirInstr::CallPure(_, target, args) => {
                     let mut handled_by_ipa = false;
@@ -153,6 +178,21 @@ pub fn run_escape_analysis(func: &MirFunction, module_ea: Option<&HashMap<String
                                     }
                                     if target_ea.param_returns.get(idx + offset).copied().unwrap_or(false) {
                                         deps.entry(*r).or_default().push(*r);
+                                    }
+                                }
+                            }
+                            
+                            for (src_idx, flows_to) in target_ea.param_flows.iter().enumerate() {
+                                if src_idx >= offset {
+                                    for &dest_idx in flows_to {
+                                        if dest_idx >= offset {
+                                            if let (Some(MirOperand::Reg(src)), Some(MirOperand::Reg(dest))) = (args.get(src_idx - offset), args.get(dest_idx - offset)) {
+                                                deps.entry(*dest).or_default().push(*src);
+                                                if !allocations.contains(dest) {
+                                                    ea.mark_escape(*src, EscapeFact::StoreExternal);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -252,9 +292,49 @@ pub fn run_escape_analysis(func: &MirFunction, module_ea: Option<&HashMap<String
         }
     }
 
+    // Determine initial all_returns_fresh based purely on allocations
+    let mut all_returns_fresh = true;
+    let mut has_returns = false;
+    for block in &func.blocks {
+        for instr in &block.instrs {
+            if let mir::types::MirInstr::Return(Some(mir::types::MirOperand::Reg(r))) = instr {
+                has_returns = true;
+                if !allocations.contains(r) {
+                    all_returns_fresh = false;
+                }
+            }
+        }
+    }
+
     let mut changed = true;
     while changed {
         changed = false;
+
+        if all_returns_fresh {
+            for block in &func.blocks {
+                for instr in &block.instrs {
+                    if let mir::types::MirInstr::Return(Some(mir::types::MirOperand::Reg(r))) = instr {
+                        if ea.prevents_owned(*r) {
+                            all_returns_fresh = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        if has_returns && !all_returns_fresh {
+            for block in &func.blocks {
+                for instr in &block.instrs {
+                    if let mir::types::MirInstr::Return(Some(mir::types::MirOperand::Reg(r))) = instr {
+                        let facts = ea.facts.get(r).cloned().unwrap_or_default();
+                        if !facts.contains(&EscapeFact::StoreExternal) {
+                            ea.mark_escape(*r, EscapeFact::StoreExternal);
+                            changed = true;
+                        }
+                    }
+                }
+            }
+        }
 
         for (to, froms) in &deps {
             if ea.does_escape(*to) {
@@ -281,6 +361,43 @@ pub fn run_escape_analysis(func: &MirFunction, module_ea: Option<&HashMap<String
         };
         ea.param_returns.push(returns);
     }
+
+    // Populate param_flows
+    for (src_idx, (src_reg, _)) in func.params.iter().enumerate() {
+        let mut flows_to = Vec::new();
+        for (dest_idx, (dest_reg, _)) in func.params.iter().enumerate() {
+            if src_idx != dest_idx {
+                // BFS to see if src_reg flows into dest_reg.
+                // deps maps dest -> [srcs], so we start at dest_reg and search for src_reg.
+                let mut visited = std::collections::HashSet::new();
+                let mut queue = std::collections::VecDeque::new();
+                queue.push_back(*dest_reg);
+                
+                let mut reachable = false;
+                while let Some(curr) = queue.pop_front() {
+                    if curr == *src_reg {
+                        reachable = true;
+                        break;
+                    }
+                    if !visited.insert(curr) {
+                        continue;
+                    }
+                    if let Some(srcs) = deps.get(&curr) {
+                        for &src in srcs {
+                            queue.push_back(src);
+                        }
+                    }
+                }
+                if reachable {
+                    flows_to.push(dest_idx);
+                }
+            }
+        }
+        ea.param_flows.push(flows_to);
+    }
+
+    ea.returns_fresh_allocation = has_returns && all_returns_fresh;
+    println!("DEBUG: Function {} has returns_fresh_allocation={}", func.name, ea.returns_fresh_allocation);
 
     ea
 }

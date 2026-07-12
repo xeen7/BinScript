@@ -14,7 +14,7 @@ pub unsafe fn set_dynamic_property(obj_ptr: *mut u8, prop_name: String, val_tagg
         obj_entry.insert(prop_name, val_tagged)
     };
     if let Some(old_val) = old_val {
-        crate::circ::circ_dec_tagged(old_val);
+        crate::circ::__bs_cleanup_tagged(old_val);
     }
 }
 
@@ -38,7 +38,7 @@ pub unsafe fn delete_dynamic_property(obj_ptr: *mut u8, prop_name: &str) -> bool
         }
     };
     if let Some(old_val) = removed {
-        crate::circ::circ_dec_tagged(old_val);
+        crate::circ::__bs_cleanup_tagged(old_val);
         return true;
     }
     false
@@ -51,7 +51,7 @@ pub unsafe fn remove_dynamic_properties(obj_ptr: *mut u8) {
     };
     if let Some(props) = old_map {
         for val in props.values() {
-            crate::circ::circ_dec_tagged(*val);
+            crate::circ::__bs_cleanup_tagged(*val);
         }
     }
 }
@@ -83,7 +83,7 @@ pub unsafe fn set_inline_property(props_slot: *mut *mut std::collections::HashMa
     }
     crate::circ::circ_inc_tagged(val_tagged);
     if let Some(old_val) = (**props_slot).insert(prop_name, val_tagged) {
-        crate::circ::circ_dec_tagged(old_val);
+        crate::circ::__bs_cleanup_tagged(old_val);
     }
 }
 
@@ -114,7 +114,7 @@ pub unsafe fn free_inline_properties(props_slot: *mut *mut std::collections::Has
         // println!("free_inline_properties: freeing {} properties", bx.len());
         for val in bx.values() {
             // println!("  freeing value {}", val);
-            crate::circ::circ_dec_tagged(*val);
+            crate::circ::__bs_cleanup_tagged(*val);
         }
         *props_slot = std::ptr::null_mut();
     } else {
@@ -131,7 +131,7 @@ pub unsafe extern "C-unwind" fn set_dynamic_property_moved(obj_ptr: *mut u8, pro
         obj_entry.insert(prop_name, val_tagged)
     };
     if let Some(old_val) = old_val {
-        crate::circ::circ_dec_tagged(old_val);
+        crate::circ::__bs_cleanup_tagged(old_val);
     }
 }
 
@@ -143,7 +143,7 @@ pub unsafe extern "C-unwind" fn set_inline_property_moved(props_slot: *mut *mut 
     }
     // Move semantics: DO NOT increment reference count of val_tagged
     if let Some(old_val) = (**props_slot).insert(prop_name, val_tagged) {
-        crate::circ::circ_dec_tagged(old_val);
+        crate::circ::__bs_cleanup_tagged(old_val);
     }
 }
 
@@ -157,7 +157,7 @@ pub unsafe extern "C-unwind" fn __bs_cleanup_dynamic_properties() {
     for entry in owned_map.values() {
         // println!("__bs_cleanup_dynamic_properties: cleaning up {} properties", entry.len());
         for val in entry.values() {
-            crate::circ::circ_dec_tagged(*val);
+            crate::circ::__bs_cleanup_tagged(*val);
         }
     }
 }

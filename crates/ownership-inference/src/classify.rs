@@ -44,8 +44,7 @@ pub fn classify_registers(
     func: &mir::MirFunction,
     alias_graph: &AliasGraph,
     escape: &EscapeAnalysis,
-    return_allocations: &std::collections::HashSet<String>,
-    param_escapes: &std::collections::HashMap<String, std::collections::HashSet<usize>>,
+    module_ea: &std::collections::HashMap<String, EscapeAnalysis>,
     signature: Option<&[MemoryClass]>,
 ) -> Classification {
     let mut class = Classification::new();
@@ -83,13 +82,21 @@ pub fn classify_registers(
                     allocations.insert(*dest);
                 }
                 CallDirect(dest, target, _) | CallPure(dest, target, _) => {
-                    let sig_opt = crate::native_sigs::NativeSignature::get(target);
-                    let returns_fresh = sig_opt.as_ref().map_or(false, |s| s.returns_fresh_allocation);
-                    let returns_primitive = sig_opt.as_ref().map_or(false, |s| s.returns_primitive);
+                    let mut returns_fresh = false;
+                    let mut returns_primitive = false;
+                    if let Some(sig) = crate::native_sigs::NativeSignature::get(target) {
+                        returns_fresh = sig.returns_fresh_allocation;
+                        returns_primitive = sig.returns_primitive;
+                    }
+                    if let Some(target_ea) = module_ea.get(target) {
+                        if target_ea.returns_fresh_allocation {
+                            returns_fresh = true;
+                        }
+                    }
 
                     if returns_primitive {
                         primitives.insert(*dest);
-                    } else if return_allocations.contains(target) || returns_fresh {
+                    } else if returns_fresh {
                         allocations.insert(*dest);
                     }
                 }

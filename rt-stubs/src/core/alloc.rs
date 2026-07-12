@@ -37,7 +37,6 @@ pub unsafe extern "C-unwind" fn __bs_alloc(vtable_ptr: *const VTable, size_in_by
 
     crate::verify::__bs_verify_track_alloc(obj_ptr);
     crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
-    println!("Allocated Shared Closure: {:p}", obj_ptr);
 
     // Return as NaN-boxed Object pointer (points to obj data, NOT header)
     {
@@ -74,7 +73,6 @@ pub unsafe extern "C-unwind" fn __bs_alloc_acyclic(vtable_ptr: *const VTable, si
 
     crate::verify::__bs_verify_track_alloc(obj_ptr);
     crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
-    println!("Allocated Shared Closure: {:p}", obj_ptr);
 
     // Return as NaN-boxed Object pointer (points to obj data, NOT header)
     {
@@ -165,7 +163,6 @@ pub unsafe extern "C-unwind" fn __bs_alloc_closure(size_in_bytes: usize) -> u64 
     crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
     println!("Allocated Shared Closure: {:p}", obj_ptr);
     {
-        println!("Allocated Closure: {:p}", obj_ptr);
         (obj_ptr as u64) | 0xFFF9_0000_0000_0000
     }
 }
@@ -226,7 +223,6 @@ pub unsafe extern "C-unwind" fn __bs_alloc_generator(size_in_bytes: usize) -> u6
     std::ptr::write_bytes(obj_ptr, 0, size_in_bytes);
     crate::verify::__bs_verify_track_alloc(obj_ptr);
     crate::circ::SHARED_ALLOCS.fetch_add(1, Ordering::Relaxed);
-    println!("Allocated Shared Closure: {:p}", obj_ptr);
-    // println!("__bs_alloc_generator: {:?}", obj_ptr);
+    println!("Allocated Shared Generator: {:p}", obj_ptr);
     (obj_ptr as u64) | 0xFFFA_0000_0000_0000
 }

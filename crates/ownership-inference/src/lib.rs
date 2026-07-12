@@ -83,14 +83,11 @@ pub fn run_ownership_analysis(module: &mut MirModule) {
 fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::HashMap<String, usize>, acyclic_classes: &std::collections::HashSet<String>, module_ea: &std::collections::HashMap<String, escape::EscapeAnalysis>, signature: Option<&[classify::MemoryClass]>) {
     let ag = alias_graph::build_alias_graph(func);
     
-    let mut return_allocations = std::collections::HashSet::new();
-    let mut param_escapes = std::collections::HashMap::new();
-    
     // We don't have to populate return_allocations / param_escapes perfectly here unless we do IPO.
     
 
     let ea = escape::run_escape_analysis(func, Some(module_ea));
-    let mut classes = classify::classify_registers(func, &ag, &ea, &return_allocations, &param_escapes, signature);
+    let mut classes = classify::classify_registers(func, &ag, &ea, module_ea, signature);
     let liveness = liveness::run_liveness_analysis(func, &ag);
 
     // Collect which registers are actual object allocations (destinations of Alloc instructions).
@@ -255,7 +252,7 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                 let mut saved_terminator = None;
                 if is_terminator {
                     saved_terminator = Some(instr.clone());
-                } else if let MirInstr::AllocClosure(_, _, captures) = &instr {
+                } else if let MirInstr::AllocClosure(_, _, captures) | MirInstr::AllocSharedClosure(_, _, captures) | MirInstr::AllocOwnedClosure(_, _, captures) = &instr {
                     new_instrs.push(instr.clone());
                     for cap in captures {
                         if let MirOperand::Reg(val_reg) = cap {

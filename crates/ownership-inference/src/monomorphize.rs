@@ -63,9 +63,7 @@ pub fn run_monomorphize_pass(
         let sig_slice = signature.as_deref();
         let mem_classes: Option<Vec<MemoryClass>> = sig_slice.map(|s| s.iter().map(|arg| arg.memory_class()).collect());
         
-        let dummy_return = HashSet::new();
-        let dummy_param = HashMap::new();
-        let classes = classify_registers(&func, &ag, &ea, &dummy_return, &dummy_param, mem_classes.as_deref());
+        let classes = classify_registers(&func, &ag, &ea, module_ea, mem_classes.as_deref());
         
         if func_name == "__bs_main_sig_" || func_name == "__bs_main" {
             println!("DEBUG MONO: Analyzing main");

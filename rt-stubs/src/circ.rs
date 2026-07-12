@@ -400,7 +400,10 @@ pub static BYPASSED_RC_OPS: std::sync::atomic::AtomicUsize = std::sync::atomic::
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_cleanup_tagged(tagged: u64) {
     let tag = tagged & crate::dynamic_call::helpers::TAG_MASK;
-    if tag == crate::dynamic_call::helpers::TAG_OWNED {
+    if tag == crate::dynamic_call::helpers::TAG_OWNED ||
+       tag == crate::dynamic_call::helpers::TAG_OWNED_CLOSURE ||
+       tag == crate::dynamic_call::helpers::TAG_OWNED_ARRAY ||
+       tag == crate::dynamic_call::helpers::TAG_OWNED_STRING {
         crate::core::alloc::__bs_drop_owned((tagged & crate::dynamic_call::helpers::PAYLOAD_MASK) as *mut u8);
     } else {
         circ_dec_tagged(tagged);
