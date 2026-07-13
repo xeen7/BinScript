@@ -9,7 +9,7 @@ members = [
     "crates/module-graph",
     "rt-stubs",
     "crates/incremental",
-    "crates/ownership-inference", "scratch/test_ast",
+    "crates/ownership-inference",
 ]
 resolver = "2"
 
