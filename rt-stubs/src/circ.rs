@@ -122,6 +122,7 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
             let color = header.get_color();
             if color == crate::circ::COLOR_WHITE {
                 header.set_color(crate::circ::COLOR_BLACK);
+                SHARED_FREES.fetch_add(1, Ordering::Relaxed);
                 // eprintln!("circ_dec (local, >0): freeing white");
                 circ_destroy(header_ptr);
                 return;
@@ -132,6 +133,7 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
                     return;
                 }
                 // eprintln!("circ_dec (local, >0): freeing");
+                SHARED_FREES.fetch_add(1, Ordering::Relaxed);
                 circ_destroy(header_ptr);
                 return;
             }
@@ -140,6 +142,7 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
             let color = header.get_color();
             if color == crate::circ::COLOR_WHITE {
                 header.set_color(crate::circ::COLOR_BLACK);
+                SHARED_FREES.fetch_add(1, Ordering::Relaxed);
                 // eprintln!("circ_dec (local, 0): freeing white");
                 circ_destroy(header_ptr);
                 return;
@@ -150,6 +153,7 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
                     return;
                 }
                 // eprintln!("circ_dec (local, 0): freeing");
+                SHARED_FREES.fetch_add(1, Ordering::Relaxed);
                 circ_destroy(header_ptr);
                 return;
             }
@@ -171,6 +175,7 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
 
         if color == crate::circ::COLOR_WHITE {
             header.set_color(crate::circ::COLOR_BLACK);
+            SHARED_FREES.fetch_add(1, Ordering::Relaxed);
             // eprintln!("circ_dec (global): freeing white");
             circ_destroy(header_ptr);
             return;
@@ -182,6 +187,7 @@ pub unsafe extern "C-unwind" fn circ_dec(header_ptr: *mut CircHeader) {
                 return;
             }
             // eprintln!("circ_dec (global): freeing <= 0");
+            SHARED_FREES.fetch_add(1, Ordering::Relaxed);
             circ_destroy(header_ptr);
             return;
         }
@@ -397,14 +403,30 @@ pub unsafe extern "C-unwind" fn __bs_print_rc_stats() {
     let bypassed = BYPASSED_RC_OPS.load(std::sync::atomic::Ordering::Relaxed);
     let arena = ARENA_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
     let arenas_created = ARENAS_CREATED.load(std::sync::atomic::Ordering::Relaxed);
-    println!("--- RC STATISTICS ---");
-    println!("Actual RcInc calls on objects: {}", incs);
-    println!("Actual RcDec calls on objects: {}", decs);
-    println!("Objects tracked by RC (Shared Allocs): {}", shared);
-    println!("Objects bypassing RC (Owned Allocs): {}", owned);
-    println!("Total Arenas created: {}", arenas_created);
-    println!("Objects dynamically tracked by Arena (Arena Allocs): {}", arena);
-    println!("Dynamically bypassed RC operations: {}", bypassed);
+    
+    let shared_frees = SHARED_FREES.load(std::sync::atomic::Ordering::Relaxed);
+    let owned_drops = OWNED_DROPS.load(std::sync::atomic::Ordering::Relaxed);
+    let arenas_destroyed = ARENAS_DESTROYED.load(std::sync::atomic::Ordering::Relaxed);
+    
+    println!("=== MEMORY & LIFETIME STATISTICS ===");
+    println!("[ Allocations ]");
+    println!("  Total Shared Objects (RC):   {}", shared);
+    println!("  Total Owned Objects:         {}", owned);
+    println!("  Total Arena Objects:         {}", arena);
+    println!("");
+    println!("[ Operations ]");
+    println!("  RC Increments:               {}", incs);
+    println!("  RC Decrements:               {}", decs);
+    println!("  Bypassed RC Operations:      {}", bypassed);
+    println!("");
+    println!("[ Lifetimes & Cleanup ]");
+    println!("  Shared Objects Freed (RC=0): {}", shared_frees);
+    println!("  Owned Objects Dropped:       {}", owned_drops);
+    println!("");
+    println!("[ Arenas ]");
+    println!("  Arenas Created:              {}", arenas_created);
+    println!("  Arenas Destroyed:            {}", arenas_destroyed);
+    println!("====================================");
 }
 
 pub static ACTUAL_RC_INCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -414,6 +436,10 @@ pub static OWNED_ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::Ato
 pub static BYPASSED_RC_OPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 pub static ARENA_ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 pub static ARENAS_CREATED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub static SHARED_FREES: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static OWNED_DROPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static ARENAS_DESTROYED: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_cleanup_tagged(tagged: u64) {

@@ -193,10 +193,13 @@ pub unsafe extern "C-unwind" fn __bs_alloc_owned_closure(size_in_bytes: usize) -
 /// Drops an owned object by destroying its contents and freeing the memory.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_drop_owned(obj_ptr: *mut u8) {
-    if obj_ptr.is_null() { return; } eprintln!("__bs_drop_owned: {:?}", obj_ptr);
+    if obj_ptr.is_null() { return; }
     
+    crate::circ::OWNED_DROPS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    // eprintln!("__bs_drop_owned: {:?}", obj_ptr);
+
     let header = obj_ptr.sub(CircHeader::SIZE) as *mut CircHeader;
-    
+
     // For Owned objects, we destroy and free them.
     crate::circ::circ_destroy(header);
 }

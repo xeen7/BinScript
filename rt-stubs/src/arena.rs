@@ -147,6 +147,8 @@ pub unsafe extern "C-unwind" fn arena_destroy(arena: *mut Arena) {
         return;
     }
     
+    crate::circ::ARENAS_DESTROYED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    
     let arena_ref = &mut *arena;
     
     // Walk dtor_list in reverse allocation order and call drop_fns
