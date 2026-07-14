@@ -28,6 +28,7 @@ pub struct Segment {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn arena_create(initial_capacity: usize) -> *mut Arena {
+    crate::circ::ARENAS_CREATED.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let capacity = if initial_capacity == 0 { DEFAULT_ARENA_CAPACITY } else { initial_capacity };
     
     // Allocate the Arena struct itself
