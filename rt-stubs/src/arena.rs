@@ -57,6 +57,8 @@ pub unsafe extern "C-unwind" fn arena_create(initial_capacity: usize) -> *mut Ar
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn arena_alloc(arena: *mut Arena, size: usize, align: usize) -> *mut u8 {
+    crate::circ::ARENA_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    
     let arena_ref = &mut *arena;
     
     // Align bump pointer
@@ -117,6 +119,10 @@ pub unsafe extern "C-unwind" fn arena_register_dtor(
     
     // Allocate DtorEntry inside the arena itself
     let dtor_ptr = arena_alloc(arena, std::mem::size_of::<DtorEntry>(), 8) as *mut DtorEntry;
+    
+    // We don't want to count DtorEntry internal allocations as "Arena Allocs" for statistics
+    crate::circ::ARENA_ALLOCS.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    
     (*dtor_ptr).obj_ptr = obj_ptr;
     (*dtor_ptr).drop_fn = drop_fn;
     

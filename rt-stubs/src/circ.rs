@@ -395,11 +395,13 @@ pub unsafe extern "C-unwind" fn __bs_print_rc_stats() {
     let owned = OWNED_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
     let shared = SHARED_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
     let bypassed = BYPASSED_RC_OPS.load(std::sync::atomic::Ordering::Relaxed);
+    let arena = ARENA_ALLOCS.load(std::sync::atomic::Ordering::Relaxed);
     println!("--- RC STATISTICS ---");
     println!("Actual RcInc calls on objects: {}", incs);
     println!("Actual RcDec calls on objects: {}", decs);
     println!("Objects tracked by RC (Shared Allocs): {}", shared);
     println!("Objects bypassing RC (Owned Allocs): {}", owned);
+    println!("Objects dynamically tracked by Arena (Arena Allocs): {}", arena);
     println!("Dynamically bypassed RC operations: {}", bypassed);
 }
 
@@ -408,6 +410,7 @@ pub static ACTUAL_RC_DECS: std::sync::atomic::AtomicUsize = std::sync::atomic::A
 pub static SHARED_ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 pub static OWNED_ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 pub static BYPASSED_RC_OPS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+pub static ARENA_ALLOCS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_cleanup_tagged(tagged: u64) {
