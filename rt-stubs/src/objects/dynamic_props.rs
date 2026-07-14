@@ -88,15 +88,20 @@ pub unsafe fn set_inline_property(props_slot: *mut *mut std::collections::HashMa
 }
 
 pub unsafe fn get_inline_property(props_slot: *mut *mut std::collections::HashMap<String, u64>, prop_name: &str) -> Option<u64> {
-    if (*props_slot).is_null() {
-        None
-    } else {
-        if let Some(&val) = (**props_slot).get(prop_name) {
-            // println!("get_inline_property returning val: {} for prop {}", val, prop_name);
-            Some(val)
-        } else {
-            None
+    if !props_slot.is_null() && !(*props_slot).is_null() {
+        let map = &*(*props_slot);
+        let res = map.get(prop_name).copied();
+        libc::printf(b"get_inline_property: map=%p prop=%s res=%llx\n\0".as_ptr() as *const i8, *props_slot, prop_name.as_ptr() as *const i8, res.unwrap_or(0xFFF1_0000_0000_0000));
+        if res.is_none() {
+            // print all keys
+            for (k, _) in map.iter() {
+                libc::printf(b"  map has key: %s\n\0".as_ptr() as *const i8, k.as_ptr() as *const i8);
+            }
         }
+        res
+    } else {
+        libc::printf(b"get_inline_property: props_slot is null\n\0".as_ptr() as *const i8);
+        None
     }
 }
 

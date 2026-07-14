@@ -186,59 +186,145 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
 
     let entry_block_id = func.blocks.first().map(|b| b.id).unwrap_or(0);
     for block in &mut func.blocks {
-        if let Some(b_last_uses) = liveness.last_uses.get(&block.id) {
-            let mut inserts: std::collections::HashMap<usize, Vec<u32>> = b_last_uses.clone();
+        let mut drops_before_map = liveness.drops_before.get(&block.id).cloned().unwrap_or_default();
+        let mut drops_after_map = liveness.drops_after.get(&block.id).cloned().unwrap_or_default();
 
-            let mut new_instrs = Vec::new();
+        let mut new_instrs = Vec::new();
 
-            // 1. Insert edge drops at the START of the block
-            if let Some(drops) = liveness.edge_drops.get(&block.id) {
-                // // println!("Edge drops for block {}: {:?}", block.id, drops);
-                for &reg in drops {
+        // 1. Insert edge drops at the START of the block
+        if let Some(drops) = liveness.edge_drops.get(&block.id) {
+            // // println!("Edge drops for block {}: {:?}", block.id, drops);
+            for &reg in drops {
+                // Caller-owned semantics: do not drop function parameters
+                if func.params.iter().any(|(r, _)| *r == reg) {
+                    continue;
+                }
+                let class = classes.get_class(reg);
+                if reg == 58 { println!("EDGE DROP reg=8 block={} class={:?}", block.id, class); }
+                match class {
+                    classify::MemoryClass::Arena(_) | classify::MemoryClass::Primitive => {}
+                    classify::MemoryClass::Stack => {
+                        new_instrs.push(MirInstr::DropStack(reg));
+                    }
+                    classify::MemoryClass::Shared => {
+                        new_instrs.push(MirInstr::RcDec(reg)); tracing::debug!("Emitting RcDec for {}", reg);
+                    }
+                    classify::MemoryClass::Owned => {
+                        new_instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
+                    }
+                    classify::MemoryClass::Borrow => {}
+                }
+            }
+        }
+
+        let len = block.instrs.len();
+        for (idx, mut instr) in block.instrs.drain(..).enumerate() {
+            let mut transferred_regs = Vec::new();
+
+            let is_terminator = idx == len - 1 && matches!(instr, MirInstr::Jump(_) | MirInstr::Branch(..) | MirInstr::Return(_) | MirInstr::Throw(_));
+
+            let mut used_reg = None;
+            if is_terminator {
+                match &instr {
+                    MirInstr::Return(Some(MirOperand::Reg(r))) => used_reg = Some(*r),
+                    MirInstr::Throw(MirOperand::Reg(r)) => used_reg = Some(*r),
+                    MirInstr::Suspend(_, MirOperand::Reg(r)) => used_reg = Some(*r),
+                    _ => {}
+                }
+            }
+
+            let generate_drops = |regs_to_drop: &Vec<u32>, transferred: &[u32], used_reg: Option<u32>, instrs: &mut Vec<MirInstr>| {
+                for &reg in regs_to_drop {
+                    if transferred.contains(&reg) {
+                        continue;
+                    }
+
                     // Caller-owned semantics: do not drop function parameters
                     if func.params.iter().any(|(r, _)| *r == reg) {
                         continue;
                     }
-                    let class = classes.get_class(reg);
-                    if reg == 58 { println!("EDGE DROP reg=8 block={} class={:?}", block.id, class); }
-                    match class {
+
+                    match classes.get_class(reg) {
                         classify::MemoryClass::Arena(_) | classify::MemoryClass::Primitive => {}
                         classify::MemoryClass::Stack => {
-                            new_instrs.push(MirInstr::DropStack(reg));
+                            instrs.push(MirInstr::DropStack(reg));
                         }
                         classify::MemoryClass::Shared => {
-                            new_instrs.push(MirInstr::RcDec(reg)); tracing::debug!("Emitting RcDec for {}", reg);
+                            if used_reg == Some(reg) {
+                                instrs.push(MirInstr::RcDecDeferred(reg));
+                            } else {
+                                instrs.push(MirInstr::RcDec(reg)); tracing::debug!("Emitting RcDec for {}", reg);
+                            }
                         }
                         classify::MemoryClass::Owned => {
-                            new_instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
+                            if used_reg != Some(reg) {
+                                instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
+                            }
                         }
                         classify::MemoryClass::Borrow => {}
                     }
                 }
-            }
+            };
 
-            let len = block.instrs.len();
-            for (idx, mut instr) in block.instrs.drain(..).enumerate() {
-                let mut transferred_regs = Vec::new();
-                // Detect Move Semantics for property assignments
-                if let Some(regs_to_drop) = inserts.get(&idx) {
-                    println!("Instruction {}: regs_to_drop={:?}", idx, regs_to_drop);
-                    if let MirInstr::StoreProp(_, _, MirOperand::Reg(val_reg), ref mut is_moved) = &mut instr {
-                        if regs_to_drop.contains(val_reg) {
-                            *is_moved = true;
-                            transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
+            // Detect Move Semantics for property assignments
+            if let Some(regs_to_drop) = drops_after_map.get(&idx) {
+                println!("Instruction {}: regs_to_drop={:?}", idx, regs_to_drop);
+                println!("  instr={:?}", instr);
+                for reg in regs_to_drop.iter() {
+                    println!("  reg={} class={:?}", reg, classes.get_class(*reg));
+                }
+                
+                let can_move = |reg: u32| -> bool {
+                    let is_param = func.params.iter().any(|(r, _)| *r == reg);
+                    let cls = classes.get_class(reg);
+                    println!("can_move check for reg {}: is_param={}, class={:?}", reg, is_param, cls);
+                    !is_param && matches!(cls, classify::MemoryClass::Owned | classify::MemoryClass::Arena(_))
+                };
+
+                if let MirInstr::StoreProp(_, _, MirOperand::Reg(val_reg), ref mut is_moved) = &mut instr {
+                    if regs_to_drop.contains(val_reg) && can_move(*val_reg) {
+                        *is_moved = true;
+                        transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
+                    }
+                } else if let MirInstr::StoreSharedField(_, _, MirOperand::Reg(val_reg), ref mut is_moved) = &mut instr {
+                    if regs_to_drop.contains(val_reg) && can_move(*val_reg) {
+                        *is_moved = true;
+                        transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
+                    }
+                } else if let MirInstr::Move(_, src) = &mut instr {
+                    if let MirOperand::Reg(val_reg) = src {
+                        if regs_to_drop.contains(val_reg) && can_move(*val_reg) {
+                            match classes.get_class(*val_reg) {
+                                classify::MemoryClass::Owned => {
+                                    transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
+                                }
+                                _ => {}
+                            }
                         }
-                    } else if let MirInstr::StoreSharedField(_, _, MirOperand::Reg(val_reg), ref mut is_moved) = &mut instr {
-                        if regs_to_drop.contains(val_reg) {
-                            *is_moved = true;
-                            transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
+                    }
+                } else if let MirInstr::CallDirect(_, target, args) | MirInstr::CallPure(_, target, args) = &instr {
+                    if let Some(sig) = crate::native_sigs::NativeSignature::get(target) {
+                        if let Some((src_idx, _)) = sig.argument_flow {
+                            if let Some(MirOperand::Reg(val_reg)) = args.get(src_idx) {
+                                if regs_to_drop.contains(val_reg) && can_move(*val_reg) {
+                                    match classes.get_class(*val_reg) {
+                                        classify::MemoryClass::Owned => {
+                                            transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred via call: {}", val_reg);
+                                        }
+                                        _ => {}
+                                    }
+                                }
+                            }
                         }
-                    } else if let MirInstr::Move(_, src) = &mut instr {
-                        if let MirOperand::Reg(val_reg) = src {
-                            if regs_to_drop.contains(val_reg) {
+                    }
+                } else if let MirInstr::CallBuiltin(_, builtin, args) = &instr {
+                    use mir::BuiltinFn;
+                    if let BuiltinFn::ArrayPush = builtin {
+                        if let Some(MirOperand::Reg(val_reg)) = args.get(1) {
+                            if regs_to_drop.contains(val_reg) && can_move(*val_reg) {
                                 match classes.get_class(*val_reg) {
                                     classify::MemoryClass::Owned => {
-                                        transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred: {}", val_reg);
+                                        transferred_regs.push(*val_reg); tracing::debug!("Moved and transferred via ArrayPush: {}", val_reg);
                                     }
                                     _ => {}
                                 }
@@ -246,8 +332,11 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                         }
                     }
                 }
+            }
 
-                let is_terminator = idx == len - 1 && matches!(instr, MirInstr::Jump(_) | MirInstr::Branch(..) | MirInstr::Return(_) | MirInstr::Throw(_));
+            if let Some(regs_to_drop) = drops_before_map.get(&idx) {
+                generate_drops(regs_to_drop, &[], used_reg, &mut new_instrs);
+            }
                 
                 let mut saved_terminator = None;
                 if is_terminator {
@@ -402,52 +491,8 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
                     new_instrs.push(inc);
                 }
 
-                if let Some(regs_to_drop) = inserts.get(&idx) {
-                    for &reg in regs_to_drop {
-                        if transferred_regs.contains(&reg) {
-                            continue;
-                        }
-
-                        // Caller-owned semantics: do not drop function parameters
-                        if func.params.iter().any(|(r, _)| *r == reg) {
-                            continue;
-                        }
-
-                        let mut used_reg = None;
-                        if is_terminator {
-                            if let Some(term) = &saved_terminator {
-                                match term {
-                                    MirInstr::Return(Some(MirOperand::Reg(r))) => used_reg = Some(*r),
-                                    MirInstr::Throw(MirOperand::Reg(r)) => used_reg = Some(*r),
-                                    MirInstr::Suspend(_, MirOperand::Reg(r)) => used_reg = Some(*r),
-                                    _ => {}
-                                }
-                            }
-                        }
-
-                        match classes.get_class(reg) {
-                            classify::MemoryClass::Arena(_) | classify::MemoryClass::Primitive => {
-                                // Arena objects and primitives don't get individual drops
-                            }
-                            classify::MemoryClass::Stack => {
-                                new_instrs.push(MirInstr::DropStack(reg));
-                            }
-                            classify::MemoryClass::Shared => {
-                                // Drop any register that holds a Shared object at its last use
-                                if deferred_regs.contains(&reg) || used_reg == Some(reg) {
-                                    new_instrs.push(MirInstr::RcDecDeferred(reg));
-                                } else {
-                                    new_instrs.push(MirInstr::RcDec(reg)); tracing::debug!("Emitting RcDec for {}", reg);
-                                }
-                            }
-                            classify::MemoryClass::Owned => {
-                                if used_reg != Some(reg) {
-                                    new_instrs.push(MirInstr::Drop(reg)); tracing::debug!("Emitting Drop for {}", reg);
-                                }
-                            }
-                            classify::MemoryClass::Borrow => {}
-                        }
-                    }
+                if let Some(regs_to_drop) = drops_after_map.get(&idx) {
+                    generate_drops(regs_to_drop, &transferred_regs, used_reg, &mut new_instrs);
                 }
                 
                 // If it's a terminator and there are active regions, we might need to destroy them
@@ -478,14 +523,13 @@ fn analyze_function(func: &mut MirFunction, class_sizes: &std::collections::Hash
             } else {
                 block.instrs = new_instrs;
             }
-        }
     }
 
-    if func.name.contains("main") || func.name.contains("test") {
+    if func.name.contains("onEvent") || func.name.contains("emitEvent") || func.name.contains("CallbackNode") {
         for block in &func.blocks {
-            // println!("=== {} Block {}: ===", func.name, block.id);
+            println!("=== {} Block {}: ===", func.name, block.id);
             for _instr in &block.instrs {
-                // println!("  {:?}", _instr);
+                println!("  {:?}", _instr);
             }
         }
     }

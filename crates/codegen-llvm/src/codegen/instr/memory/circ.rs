@@ -57,6 +57,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let tag = self.builder.build_right_shift(
             val, self.i64_ty.const_int(48, false), false, "rc_tag"
         ).unwrap();
+
         let is_obj = self.builder.build_int_compare(
             IntPredicate::EQ, tag, self.i64_ty.const_int(0xFFF6, false), "is_obj"
         ).unwrap();
@@ -126,29 +127,39 @@ impl<'ctx> LlvmCodegen<'ctx> {
             let is_owned_arr = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_owned_array, "is_owned_arr").unwrap();
             let is_owned_str = self.builder.build_int_compare(IntPredicate::EQ, tag, tag_owned_string, "is_owned_str").unwrap();
             
-            let is_owned_1 = self.builder.build_or(is_owned_obj, is_owned_clo, "is_owned_1").unwrap();
-            let is_owned_2 = self.builder.build_or(is_owned_arr, is_owned_str, "is_owned_2").unwrap();
-            let is_owned = self.builder.build_or(is_owned_1, is_owned_2, "is_owned").unwrap();
-            
-            // We removed the is_shared check since we strictly only act on is_owned
+            let is_owned = self.builder.build_or(is_owned_obj, is_owned_clo, "is_owned_1").unwrap();
+            let is_owned = self.builder.build_or(is_owned, is_owned_arr, "is_owned").unwrap();
 
             let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
             let owned_block = self.ctx.append_basic_block(current_fn, "drop_owned");
+            let str_block = self.ctx.append_basic_block(current_fn, "drop_str");
             let cont_block = self.ctx.append_basic_block(current_fn, "drop_cont");
             
-            // If owned -> owned_block
-            // Else -> cont_block
+            // Branch to str_block if string, else check other owned types
+            let non_str_check_bb = self.ctx.append_basic_block(current_fn, "check_owned_non_str");
+            self.builder.build_conditional_branch(is_owned_str, str_block, non_str_check_bb).unwrap();
+            
+            // --- check_owned_non_str ---
+            self.builder.position_at_end(non_str_check_bb);
             self.builder.build_conditional_branch(is_owned, owned_block, cont_block).unwrap();
+            
+            // Extract raw ptr for both blocks
+            let mask = self.i64_ty.const_int(0x0000_FFFF_FFFF_FFFF, false);
             
             // --- drop_owned ---
             self.builder.position_at_end(owned_block);
-            let mask = self.i64_ty.const_int(0x0000_FFFF_FFFF_FFFF, false);
-            let raw_ptr_i64 = self.builder.build_and(val, mask, "unbox_ptr").unwrap();
-            let raw_ptr = self.builder.build_int_to_ptr(raw_ptr_i64, self.ptr_ty, "ptr").unwrap();
-            
+            let raw_ptr_i64_1 = self.builder.build_and(val, mask, "unbox_ptr_1").unwrap();
+            let raw_ptr_1 = self.builder.build_int_to_ptr(raw_ptr_i64_1, self.ptr_ty, "ptr_1").unwrap();
             let drop_owned_fn = self.funcs["__bs_drop_owned"];
-            self.builder.build_call(drop_owned_fn, &[raw_ptr.into()], "call_drop_owned").unwrap();
+            self.builder.build_call(drop_owned_fn, &[raw_ptr_1.into()], "call_drop_owned").unwrap();
+            self.builder.build_unconditional_branch(cont_block).unwrap();
             
+            // --- drop_str ---
+            self.builder.position_at_end(str_block);
+            let raw_ptr_i64_2 = self.builder.build_and(val, mask, "unbox_ptr_2").unwrap();
+            let raw_ptr_2 = self.builder.build_int_to_ptr(raw_ptr_i64_2, self.ptr_ty, "ptr_2").unwrap();
+            let free_fn = self.funcs["free"];
+            self.builder.build_call(free_fn, &[raw_ptr_2.into()], "call_free_str").unwrap();
             self.builder.build_unconditional_branch(cont_block).unwrap();
 
             // --- cont_block ---

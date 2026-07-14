@@ -91,6 +91,16 @@ pub fn build_alias_graph(func: &MirFunction) -> AliasGraph {
                 MirInstr::BorrowMut(dest, src) => {
                     ag.add_edge(*src, *dest, AliasKind::BorrowMut);
                 }
+                MirInstr::CallDirect(dest, name, args) if name == "__bs_index_get" || name == "__bs_array_get" => {
+                    if let Some(MirOperand::Reg(s)) = args.first() {
+                        ag.add_edge(*s, *dest, AliasKind::Borrow);
+                    }
+                }
+                MirInstr::CallBuiltin(dest, mir::BuiltinFn::ArrayGet, args) => {
+                    if let Some(MirOperand::Reg(s)) = args.first() {
+                        ag.add_edge(*s, *dest, AliasKind::Borrow);
+                    }
+                }
                 _ => {}
             }
         }

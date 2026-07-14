@@ -67,7 +67,8 @@ pub fn classify_registers(
                 }
                 Move(dest, op) => {
                     if let mir::types::MirOperand::ConstNum(_) | mir::types::MirOperand::ConstBool(_) |
-                           mir::types::MirOperand::ConstNull | mir::types::MirOperand::ConstUndefined = op {
+                           mir::types::MirOperand::ConstNull | mir::types::MirOperand::ConstUndefined |
+                           mir::types::MirOperand::ConstStr(_) = op {
                         primitives.insert(*dest);
                     } else if let mir::types::MirOperand::Reg(src) = op {
                         if allocations.contains(src) {
@@ -154,13 +155,23 @@ pub fn classify_registers(
     let mut is_borrow = std::collections::HashSet::new();
     for (idx, (reg, _)) in func.params.iter().enumerate() {
         if let Some(sig) = signature {
-            if idx > 0 && (idx - 1) < sig.len() {
-                match sig[idx - 1] {
-                    MemoryClass::Borrow | MemoryClass::Arena(_) => { is_borrow.insert(*reg); }
-                    MemoryClass::Shared => { is_shared.insert(*reg); }
-                    MemoryClass::Owned => { allocations.insert(*reg); }
-                    MemoryClass::Primitive => { primitives.insert(*reg); }
-                    _ => {}
+            let sig_idx = if sig.len() == func.params.len() {
+                Some(idx)
+            } else if sig.len() == func.params.len() - 1 && idx > 0 {
+                Some(idx - 1)
+            } else {
+                None
+            };
+
+            if let Some(s_idx) = sig_idx {
+                if s_idx < sig.len() {
+                    match sig[s_idx] {
+                        MemoryClass::Borrow | MemoryClass::Arena(_) => { is_borrow.insert(*reg); }
+                        MemoryClass::Shared => { is_shared.insert(*reg); }
+                        MemoryClass::Owned => { allocations.insert(*reg); }
+                        MemoryClass::Primitive => { primitives.insert(*reg); }
+                        _ => {}
+                    }
                 }
             }
         }

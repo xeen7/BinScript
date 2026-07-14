@@ -1,9 +1,12 @@
 use mir::types::{MirReg, MirInstr, MirFunction, MirOperand, BlockId};
 use std::collections::{HashSet, HashMap};
+use crate::alias_graph::AliasGraph;
 
 pub struct LivenessInfo {
-    // Maps block ID to a map of instruction index -> registers whose last use is at that index.
-    pub last_uses: HashMap<BlockId, HashMap<usize, Vec<MirReg>>>,
+    // Maps block ID to a map of instruction index -> registers that die BEFORE that instruction
+    pub drops_before: HashMap<BlockId, HashMap<usize, Vec<MirReg>>>,
+    // Maps block ID to a map of instruction index -> registers that die AFTER that instruction
+    pub drops_after: HashMap<BlockId, HashMap<usize, Vec<MirReg>>>,
     // Maps block ID to registers that must be dropped at the START of the block (due to edge drops)
     pub edge_drops: HashMap<BlockId, Vec<MirReg>>,
 }
@@ -57,38 +60,42 @@ pub fn split_critical_edges(func: &mut MirFunction) {
     func.blocks.extend(new_blocks);
 }
 
-pub fn run_liveness_analysis(func: &mut MirFunction, alias_graph: &crate::alias_graph::AliasGraph) -> LivenessInfo {
-    split_critical_edges(func);
-
+pub fn run_liveness_analysis(func: &MirFunction, alias_graph: &AliasGraph) -> LivenessInfo {
     let mut live_in: HashMap<BlockId, HashSet<MirReg>> = HashMap::new();
     let mut live_out: HashMap<BlockId, HashSet<MirReg>> = HashMap::new();
+
+    for block in &func.blocks {
+        live_in.insert(block.id, HashSet::new());
+        live_out.insert(block.id, HashSet::new());
+    }
+
     let mut defs: HashMap<BlockId, HashSet<MirReg>> = HashMap::new();
     let mut uses: HashMap<BlockId, HashSet<MirReg>> = HashMap::new();
 
-    // Compute local defs and uses for each block
     for block in &func.blocks {
         let mut b_defs = HashSet::new();
         let mut b_uses = HashSet::new();
-
         for instr in &block.instrs {
             let (i_defs, i_uses) = get_defs_uses(instr);
             for u in i_uses {
                 if !b_defs.contains(&u) {
                     b_uses.insert(u);
                 }
+                let origins = alias_graph.get_borrow_origins(u);
+                for o in origins {
+                    if !b_defs.contains(&o) {
+                        b_uses.insert(o);
+                    }
+                }
             }
             for d in i_defs {
                 b_defs.insert(d);
             }
         }
-
         defs.insert(block.id, b_defs);
         uses.insert(block.id, b_uses);
-        live_in.insert(block.id, HashSet::new());
-        live_out.insert(block.id, HashSet::new());
     }
 
-    // Fixed-point iteration for live variables
     let mut changed = true;
     while changed {
         changed = false;
@@ -116,7 +123,6 @@ pub fn run_liveness_analysis(func: &mut MirFunction, alias_graph: &crate::alias_
                 }
             }
 
-            // Liveness Extension: if a borrowed register is live, its origin MUST be live
             let mut alias_additions = Vec::new();
             for &r in &new_in {
                 let origins = alias_graph.get_borrow_origins(r);
@@ -139,11 +145,19 @@ pub fn run_liveness_analysis(func: &mut MirFunction, alias_graph: &crate::alias_
         }
     }
 
-    // Compute last uses
-    let mut last_uses: HashMap<BlockId, HashMap<usize, Vec<MirReg>>> = HashMap::new();
+    if func.name.contains("emitEvent") {
+        for block in &func.blocks {
+            println!("Block {} live_in: {:?}", block.id, live_in.get(&block.id));
+            println!("Block {} live_out: {:?}", block.id, live_out.get(&block.id));
+        }
+    }
+
+    let mut drops_before: HashMap<BlockId, HashMap<usize, Vec<MirReg>>> = HashMap::new();
+    let mut drops_after: HashMap<BlockId, HashMap<usize, Vec<MirReg>>> = HashMap::new();
 
     for block in &func.blocks {
-        let mut b_last_uses: HashMap<usize, Vec<MirReg>> = HashMap::new();
+        let mut b_drops_before: HashMap<usize, Vec<MirReg>> = HashMap::new();
+        let mut b_drops_after: HashMap<usize, Vec<MirReg>> = HashMap::new();
         let out = live_out.get(&block.id).unwrap();
 
         let mut currently_live = out.clone();
@@ -151,33 +165,42 @@ pub fn run_liveness_analysis(func: &mut MirFunction, alias_graph: &crate::alias_
         for (idx, instr) in block.instrs.iter().enumerate().rev() {
             let (i_defs, i_uses) = get_defs_uses(instr);
 
-            for d in i_defs {
-                if !currently_live.contains(&d) {
-                    // This variable is defined but never used afterwards in this block.
-                    // If it also doesn't live out, then it's completely dead and should be dropped immediately.
-                    b_last_uses.entry(idx).or_default().push(d);
+            for d in &i_defs {
+                if !currently_live.contains(d) {
+                    b_drops_after.entry(idx).or_default().push(*d);
                 }
-                currently_live.remove(&d);
+                currently_live.remove(d);
             }
 
-            for u in i_uses {
+            let mut all_uses = Vec::new();
+            for u in &i_uses {
+                all_uses.push(*u);
+                for o in alias_graph.get_borrow_origins(*u) {
+                    all_uses.push(o);
+                }
+            }
+
+            for u in all_uses {
                 if !currently_live.contains(&u) {
-                    // This is the last use of 'u' in this block, and it doesn't live out!
-                    b_last_uses.entry(idx).or_default().push(u);
+                    // If 'u' is defined by this instruction, its old value cannot be dropped
+                    // AFTER this instruction (because the register now holds the new value).
+                    // It will instead be caught by the drops_before logic below.
+                    if !i_defs.contains(&u) {
+                        b_drops_after.entry(idx).or_default().push(u);
+                    }
                     currently_live.insert(u);
                 }
-                
-                let origins = alias_graph.get_borrow_origins(u);
-                for o in origins {
-                    if !currently_live.contains(&o) {
-                        b_last_uses.entry(idx).or_default().push(o);
-                        currently_live.insert(o);
-                    }
+            }
+            
+            for d in &i_defs {
+                if currently_live.contains(d) {
+                    b_drops_before.entry(idx).or_default().push(*d);
                 }
             }
         }
 
-        last_uses.insert(block.id, b_last_uses);
+        drops_before.insert(block.id, b_drops_before);
+        drops_after.insert(block.id, b_drops_after);
     }
 
     let mut edge_drops: HashMap<BlockId, Vec<MirReg>> = HashMap::new();
@@ -207,7 +230,7 @@ pub fn run_liveness_analysis(func: &mut MirFunction, alias_graph: &crate::alias_
         }
     }
 
-    LivenessInfo { last_uses, edge_drops }
+    LivenessInfo { drops_before, drops_after, edge_drops }
 }
 
 fn get_defs_uses(instr: &MirInstr) -> (Vec<MirReg>, Vec<MirReg>) {

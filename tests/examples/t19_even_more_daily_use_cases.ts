@@ -6,49 +6,63 @@ function assertEqual(actual: any, expected: any, description: string) {
   }
 }
 
-class EventEmitter {
-  #listeners: any = {};
-
-  on(event: string, callback: any) {
-    if (!this.#listeners[event]) {
-      this.#listeners[event] = [];
-    }
-    this.#listeners[event].push(callback);
+class CallbackNode {
+  event: string;
+  callback: (data: any) => void;
+  next: CallbackNode | null;
+  constructor(event: string, callback: (data: any) => void, next: CallbackNode | null) {
+    this.event = event;
+    this.callback = callback;
+    this.next = next;
   }
+}
 
-  emit(event: string, arg: any) {
-    const callbacks = this.#listeners[event];
-    console.log("emit event: " + event + ", callbacks present: " + (callbacks !== undefined && callbacks !== null) + ", count: " + (callbacks ? callbacks.length : 0));
-    if (callbacks) {
-      for (let i = 0; i < callbacks.length; i++) {
-        console.log("callbacks[" + i + "] type: " + typeof callbacks[i]);
-        console.log("callbacks[" + i + "] content: " + callbacks[i]);
-        callbacks[i](arg);
-      }
+class EventEmitter {
+  head: CallbackNode | null = null;
+}
+
+function onEvent(emitter: EventEmitter, event: string, callback: (data: any) => void): EventEmitter {
+  console.log("onEvent called. Current head is " + (emitter.head === null ? "null" : "not null"));
+  const newNode = new CallbackNode(event, callback, emitter.head);
+  console.log("newNode created.");
+  emitter.head = newNode;
+  console.log("onEvent finished. New head is " + (emitter.head === null ? "null" : "not null"));
+  return emitter;
+}
+
+function emitEvent(emitter: EventEmitter, event: string, arg: any) {
+  console.log("emitEvent called, head is " + (emitter.head === null ? "null" : "not null"));
+  let curr = emitter.head;
+  while (curr !== null) {
+    console.log("Checking node with event: " + curr.event);
+    if (curr.event === event) {
+      console.log("Match found! Invoking callback.");
+      curr.callback(arg);
     }
+    curr = curr.next;
   }
 }
 
 function runEventEmitterTests() {
-  const emitter = new EventEmitter();
+  let emitter = new EventEmitter();
   const state = {
     receivedData: "",
     callCount: 0
   };
 
-  emitter.on("data", (data: any) => {
+  emitter = onEvent(emitter, "data", (data: any) => {
     console.log("CALLBACK INVOKED with data: " + data);
     state.receivedData = data;
     state.callCount = state.callCount + 1;
   });
 
   console.log("Emitting data first time...");
-  emitter.emit("data", "Hello Event!");
+  emitEvent(emitter, "data", "Hello Event!");
   console.log("After first emit, state.receivedData: " + state.receivedData);
   assertEqual(state.receivedData, "Hello Event!", "Event data received by listener");
   assertEqual(state.callCount, 1, "Listener called exactly once");
 
-  emitter.emit("data", "Second Event!");
+  emitEvent(emitter, "data", "Second Event!");
   assertEqual(state.receivedData, "Second Event!", "Event data updated on second emit");
   assertEqual(state.callCount, 2, "Listener call count incremented");
 }

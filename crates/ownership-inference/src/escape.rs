@@ -263,8 +263,10 @@ pub fn run_escape_analysis(func: &MirFunction, module_ea: Option<&HashMap<String
                         _ => {}
                     }
                 }
-                MirInstr::StoreGlobal(_, _) => {
-                    // This escapes
+                MirInstr::StoreGlobal(_, op) => {
+                    if let MirOperand::Reg(r) = op {
+                        ea.mark_escape(*r, EscapeFact::StoreGlobal);
+                    }
                 }
                 MirInstr::StoreProp(obj, _, MirOperand::Reg(val), _) |
                 MirInstr::StoreSharedField(obj, _, MirOperand::Reg(val), _) |

@@ -67,7 +67,7 @@ impl NativeSignature {
                 "__bs_array_slice" | "__bs_array_concat" | "__bs_array_map" | "__bs_array_filter" => {
                     sig.returns_fresh_allocation = true;
                 }
-                "__bs_array_push" | "__bs_array_unshift" => {
+                "__bs_array_push" | "__bs_array_unshift" | "__bs_call_push" | "__bs_call_unshift" => {
                     sig.argument_flow = Some((1, 0)); // arg 1 flows into arg 0
                     sig.returns_primitive = true; // returns new length
                 }

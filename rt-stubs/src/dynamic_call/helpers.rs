@@ -3,6 +3,7 @@ use crate::VTable;
 pub const TAG_ARRAY: u64 = 0xFFFB_0000_0000_0000;
 pub const TAG_STRING: u64 = 0xFFF7_0000_0000_0000;
 pub const TAG_OBJECT: u64 = 0xFFF6_0000_0000_0000;
+pub const TAG_CLOSURE: u64 = 0xFFF9_0000_0000_0000;
 pub const TAG_OWNED: u64 = 0xFFFC_0000_0000_0000;
 pub const TAG_OWNED_CLOSURE: u64 = 0x7FF9_0000_0000_0000;
 pub const TAG_OWNED_ARRAY: u64 = 0x7FFB_0000_0000_0000;
@@ -11,6 +12,16 @@ pub const TAG_ARENA_ARRAY: u64 = 0x7FFA_0000_0000_0000;
 pub const TAG_ARENA: u64 = 0xFFFE_0000_0000_0000;
 pub const TAG_MASK: u64 = 0xFFFF_0000_0000_0000;
 pub const PAYLOAD_MASK: u64 = 0x0000_FFFF_FFFF_FFFF;
+
+#[inline(always)]
+pub unsafe fn get_rc_ptr(val_tagged: u64) -> Option<*mut u8> {
+    let tag = val_tagged & TAG_MASK;
+    if tag == TAG_OBJECT || tag == TAG_ARRAY || tag == TAG_STRING || tag == TAG_CLOSURE {
+        Some((val_tagged & PAYLOAD_MASK) as *mut u8)
+    } else {
+        None
+    }
+}
 
 #[inline(always)]
 pub fn is_array_tag(tag: u64) -> bool {

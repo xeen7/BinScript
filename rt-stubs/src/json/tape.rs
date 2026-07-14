@@ -91,6 +91,11 @@ pub unsafe extern "C" fn __bs_json_tape_materialize(tape_tagged: u64) -> u64 {
 #[no_mangle]
 pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len: u32) -> u64 {
     let tag = obj_tagged & 0xFFFF_0000_0000_0000;
+    
+    let mut c_prop = vec![0u8; len as usize + 1];
+    c_prop[..len as usize].copy_from_slice(std::slice::from_raw_parts(prop_str, len as usize));
+    libc::printf(b"__bs_prop_get: obj=%p tag=%llx prop=%s\n\0".as_ptr() as *const i8, obj_tagged, tag, c_prop.as_ptr() as *const i8);
+    
     if tag == TAG_JSON_TAPE {
         return __bs_json_tape_get(obj_tagged, prop_str, len);
     }
@@ -111,6 +116,7 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
                 return val;
             }
         }
+        libc::printf(b"__bs_prop_get returning undefined (array prop)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
     if tag == 0xFFF7_0000_0000_0000 || tag == 0x7FF7_0000_0000_0000 {
@@ -118,14 +124,17 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
         if prop_slice == b"length" {
             return crate::string::__bs_string_length(obj_tagged);
         }
+        libc::printf(b"__bs_prop_get returning undefined (string prop)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
     if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
+        libc::printf(b"__bs_prop_get returning undefined (invalid tag)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
     
     let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;
     if payload == 0 {
+        libc::printf(b"__bs_prop_get returning undefined (payload 0)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
 
@@ -142,6 +151,16 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
                 let name_ptr = *vtable.field_names.add(i);
                 let name_len = libc::strlen(name_ptr as *const i8) as usize;
                 let name_slice = std::slice::from_raw_parts(name_ptr as *const u8, name_len);
+                
+                // DEBUG PRINT
+                let mut c_prop = vec![0u8; prop_slice.len() + 1];
+                c_prop[..prop_slice.len()].copy_from_slice(prop_slice);
+                
+                libc::printf(
+                    b"__bs_prop_get: comparing class field '%s' with requested '%s'\n\0".as_ptr() as *const i8,
+                    name_ptr as *const i8,
+                    c_prop.as_ptr() as *const i8
+                );
                 if name_slice == prop_slice {
                     let field_slot = (obj_ptr as *mut u64).add(2 + i);
                     let val = *field_slot;
@@ -228,6 +247,11 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
 #[no_mangle]
 pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len: u32, val_tagged: u64) {
     let tag = obj_tagged & 0xFFFF_0000_0000_0000;
+    
+    let mut c_prop = vec![0u8; len as usize + 1];
+    c_prop[..len as usize].copy_from_slice(std::slice::from_raw_parts(prop_str, len as usize));
+    libc::printf(b"__bs_prop_set: obj=%p tag=%llx prop=%s val=%llx\n\0".as_ptr() as *const i8, obj_tagged, tag, c_prop.as_ptr() as *const i8, val_tagged);
+    
     if tag == TAG_JSON_TAPE {
         return;
     }
@@ -294,6 +318,11 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *const u8, prop_len: u32, val_tagged: u64) -> u64 {
     let tag = obj_tagged & 0xFFFF_0000_0000_0000;
+    
+    let mut c_prop = vec![0u8; prop_len as usize + 1];
+    c_prop[..prop_len as usize].copy_from_slice(std::slice::from_raw_parts(prop_ptr, prop_len as usize));
+    libc::printf(b"__bs_prop_set_moved: obj=%p tag=%llx prop=%s val=%llx\n\0".as_ptr() as *const i8, obj_tagged, tag, c_prop.as_ptr() as *const i8, val_tagged);
+    
     if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 {
         let prop_slice = std::slice::from_raw_parts(prop_ptr, prop_len as usize);
         if let Ok(s) = std::str::from_utf8(prop_slice) {
@@ -314,8 +343,9 @@ pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *
     let obj_ptr = payload as *mut u8;
     
     // 1. Check class fields if vtable is present (only objects)
-    if tag == 0xFFF6_0000_0000_0000 {
-        let vtable_ptr = *(obj_ptr as *const *const crate::VTable);
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 {
+        let vtable_ptr_ptr = obj_ptr as *const *const crate::VTable;
+        let vtable_ptr = *vtable_ptr_ptr;
         if !vtable_ptr.is_null() {
             let vtable = &*vtable_ptr;
             let fields_count = vtable.fields_count as usize;
@@ -343,7 +373,7 @@ pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *
 
     // 2. Otherwise set as inline property
     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
-        if tag == 0xFFF6_0000_0000_0000 {
+        if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 {
             let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
             crate::objects::dynamic_props::set_inline_property_moved(props_slot, prop_name.to_string(), val_tagged);
         } else {
