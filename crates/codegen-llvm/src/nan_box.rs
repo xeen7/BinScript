@@ -141,7 +141,7 @@ impl<'ctx> NanBoxHelper<'ctx> {
         let tag_gen = self.i64_ty.const_int(0xFFFA, false);
         let tag_array = self.i64_ty.const_int(0xFFFB, false);
         // Owned tags
-        let tag_owned_obj = self.i64_ty.const_int(0x7FFC, false);
+        let tag_owned_obj = self.i64_ty.const_int(0x7FF6, false);
         let tag_owned_closure = self.i64_ty.const_int(0x7FF9, false);
         let tag_owned_array = self.i64_ty.const_int(0x7FFB, false);
         let tag_owned_str = self.i64_ty.const_int(0x7FF7, false);

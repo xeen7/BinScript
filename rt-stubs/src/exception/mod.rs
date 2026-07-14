@@ -2,7 +2,6 @@
 
 pub mod personality;
 
-use std::cell::RefCell;
 
 #[repr(C)]
 pub struct _Unwind_Exception {
@@ -39,7 +38,7 @@ pub unsafe extern "C-unwind" fn __bs_throw(value: u64) {
     });
     let exn_ptr = Box::into_raw(bs_ex_box) as *mut _Unwind_Exception;
 
-    let res = _Unwind_RaiseException(exn_ptr);
+    let _res = _Unwind_RaiseException(exn_ptr);
     libc::printf("Unwind failed\n\0".as_ptr() as *const i8);
     std::process::abort();
 }

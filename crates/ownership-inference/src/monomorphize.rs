@@ -114,8 +114,8 @@ pub fn run_monomorphize_pass(
                             // Perform Constant Propagation and DCE on the clone
                             let mut const_params = HashMap::new();
                             for (idx, (reg, _)) in cloned_func.params.iter().enumerate() {
-                                if idx > 0 && (idx - 1) < call_sig.len() {
-                                    match call_sig[idx - 1] {
+                                if idx < call_sig.len() {
+                                    match call_sig[idx] {
                                         SignatureArg::ConstBool(b) => { const_params.insert(*reg, MirOperand::ConstBool(b)); }
                                         SignatureArg::ConstNum(n) => { const_params.insert(*reg, MirOperand::ConstNum(f64::from_bits(n))); }
                                         _ => {}

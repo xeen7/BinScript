@@ -3,7 +3,6 @@ use mir::types::*;
 use diagnostics::CompileResult;
 
 use crate::codegen::LlvmCodegen;
-use inkwell::values::FunctionValue;
 
 impl<'ctx> LlvmCodegen<'ctx> {
     pub(super) fn emit_function(&mut self, func: &MirFunction) -> CompileResult<()> {
@@ -16,9 +15,9 @@ impl<'ctx> LlvmCodegen<'ctx> {
     }
 
     fn emit_normal_function(&mut self, func: &MirFunction) -> CompileResult<()> {
-        for (i, b) in func.blocks.iter().enumerate() {
+        for (_i, b) in func.blocks.iter().enumerate() {
             // println!("Codegen Block {}:", i);
-            for instr in &b.instrs {
+            for _instr in &b.instrs {
                 // println!("  {:?}", instr);
             }
         }
@@ -102,7 +101,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.builder.position_at_end(self.bbs[&b.id]);
             if func.name.contains("fibonacci") {
                 // println!("Codegen Block {}:", b.id);
-                for instr in &b.instrs {
+                for _instr in &b.instrs {
                     // println!("  {:?}", instr);
                 }
             }
@@ -137,7 +136,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
     fn emit_generator_function(&mut self, func: &MirFunction) -> CompileResult<()> {
         let fv = self.funcs[&func.name];
         let num_args = func.params.len() as u32;
-        let num_locals = func.next_reg;
+        let _num_locals = func.next_reg;
 
         let mut struct_fields = vec![
             self.i64_ty.into(), // poll_fn ptr
@@ -354,7 +353,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.builder.position_at_end(self.bbs[&b.id]);
             if func.name.contains("fibonacci") {
                 // println!("Codegen Block {}:", b.id);
-                for instr in &b.instrs {
+                for _instr in &b.instrs {
                     // println!("  {:?}", instr);
                 }
             }

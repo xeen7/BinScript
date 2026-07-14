@@ -16,6 +16,10 @@ pub static MAP_DATA: Lazy<Mutex<HashMap<u64, HashMap<u64, u64>>>> = Lazy::new(||
 pub unsafe extern "C-unwind" fn map_set(env: u64, key: u64, val: u64) -> u64 {
     let closure_ptr = (env & 0x0000_FFFF_FFFF_FFFF) as *const u64;
     let obj_tagged = *(closure_ptr.add(3));
+    let fmt = b"map_set: map=%lx key=%lx val=%lx\n\0".as_ptr() as *const libc::c_char;
+    libc::printf(fmt, obj_tagged, key, val);
+    libc::fflush(std::ptr::null_mut());
+
     let mut data = MAP_DATA.lock().unwrap();
     let map = data.entry(obj_tagged).or_insert_with(HashMap::new);
     
@@ -38,6 +42,10 @@ pub unsafe extern "C-unwind" fn map_set(env: u64, key: u64, val: u64) -> u64 {
 pub unsafe extern "C-unwind" fn map_get(env: u64, key: u64) -> u64 {
     let closure_ptr = (env & 0x0000_FFFF_FFFF_FFFF) as *const u64;
     let obj_tagged = *(closure_ptr.add(3));
+    let fmt = b"map_get: map=%lx key=%lx\n\0".as_ptr() as *const libc::c_char;
+    libc::printf(fmt, obj_tagged, key);
+    libc::fflush(std::ptr::null_mut());
+
     let data = MAP_DATA.lock().unwrap();
     let result = if let Some(map) = data.get(&obj_tagged) {
         if let Some(&val) = map.get(&key) {

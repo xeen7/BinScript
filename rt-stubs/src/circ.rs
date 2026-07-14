@@ -343,7 +343,7 @@ pub unsafe extern "C-unwind" fn circ_dec_tagged(val: u64) {
             let header_ptr = obj_ptr.sub(crate::circ::CircHeader::SIZE) as *mut crate::circ::CircHeader;
             crate::circ::circ_dec(header_ptr);
         }
-    } else if rc_tag == 0xFFFC || rc_tag == 0x7FF9 || rc_tag == 0x7FFB {
+    } else if rc_tag == 0x7FF6 || rc_tag == 0x7FF9 || rc_tag == 0x7FFB {
         let unbox_ptr = val & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = unbox_ptr as *mut u8;
         if !obj_ptr.is_null() {

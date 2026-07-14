@@ -10,7 +10,7 @@ thread_local! {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_rc_inc_deferred(header: *mut CircHeader) {
     if header.is_null() { return; }
-    let obj_ptr = (header as *mut u8).add(CircHeader::SIZE);
+    let _obj_ptr = (header as *mut u8).add(CircHeader::SIZE);
     // println!("__bs_rc_inc_deferred: {:?}", obj_ptr);
     DELTA_BUFFER.with(|buf| {
         *buf.borrow_mut().entry(header).or_insert(0) += 1;
@@ -21,7 +21,7 @@ pub unsafe extern "C-unwind" fn __bs_rc_inc_deferred(header: *mut CircHeader) {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_rc_dec_deferred(header: *mut CircHeader) {
     if header.is_null() { return; }
-    let obj_ptr = (header as *mut u8).add(CircHeader::SIZE);
+    let _obj_ptr = (header as *mut u8).add(CircHeader::SIZE);
     // println!("__bs_rc_dec_deferred: {:?}", obj_ptr);
     DELTA_BUFFER.with(|buf| {
         *buf.borrow_mut().entry(header).or_insert(0) -= 1;

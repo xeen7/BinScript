@@ -117,7 +117,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             let shift = self.i64_ty.const_int(48, false);
             let tag = self.builder.build_right_shift(val, shift, false, "rc_tag").unwrap();
             
-            let tag_owned = self.i64_ty.const_int(0xFFFC, false);
+            let tag_owned = self.i64_ty.const_int(0x7FF6, false);
             let tag_owned_closure = self.i64_ty.const_int(0x7FF9, false);
             let tag_owned_array = self.i64_ty.const_int(0x7FFB, false);
             let tag_owned_string = self.i64_ty.const_int(0x7FF7, false);

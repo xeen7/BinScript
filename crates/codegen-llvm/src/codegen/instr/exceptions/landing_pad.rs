@@ -66,7 +66,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             } else {
                 // Generator fallback: use runtime flush_down_to
                 let current_bb = self.builder.get_insert_block().unwrap();
-                if let Some(depth_ptr) = self.catch_raii_indices.get(&current_bb) {
+                if let Some(_depth_ptr) = self.catch_raii_indices.get(&current_bb) {
                     // For generators, catch_raii_indices stores something different — 
                     // but generators still use the old catch_depths path. Handle gracefully.
                 }

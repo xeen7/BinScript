@@ -87,7 +87,7 @@ pub unsafe extern "C-unwind" fn __bs_alloc_acyclic(vtable_ptr: *const VTable, si
 ///
 /// Layout: `[vtable ptr | field_0 | field_1 | ...]`
 ///
-/// NaN-boxing tag for owned object: TAG_OWNED_OBJECT = 0xFFFC_0000_0000_0000.
+/// NaN-boxing tag for owned object: TAG_OWNED_OBJECT = 0x7FF6_0000_0000_0000.
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_alloc_owned(vtable_ptr: *const VTable, size_in_bytes: usize) -> u64 {
     let total_size = CircHeader::SIZE + size_in_bytes;
@@ -125,7 +125,7 @@ pub unsafe extern "C-unwind" fn __bs_alloc_owned(vtable_ptr: *const VTable, size
     // Return as NaN-boxed Owned Object pointer
     {
         println!("Allocated Owned Object: {:p}", obj_ptr);
-        (obj_ptr as u64) | 0xFFFC_0000_0000_0000
+        (obj_ptr as u64) | 0x7FF6_0000_0000_0000
     }
 }
 

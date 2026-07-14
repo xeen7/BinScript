@@ -1,11 +1,11 @@
 use mir::MirModule;
-use mir::types::{MirInstr, MirOperand, MirReg};
+use mir::types::{MirInstr, MirOperand};
 use std::collections::HashMap;
 
 pub fn run_devirtualize_pass(module: &mut MirModule) {
-    let mut func_id_to_name = module.func_id_to_name.clone();
+    let func_id_to_name = module.func_id_to_name.clone();
 
-    let mut process_func = |func: &mut mir::MirFunction| {
+    let process_func = |func: &mut mir::MirFunction| {
         let mut reg_to_func = HashMap::new();
 
         for b in &mut func.blocks {

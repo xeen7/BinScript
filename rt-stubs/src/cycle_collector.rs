@@ -1,9 +1,8 @@
 use std::sync::{Mutex, Condvar, Arc};
 use std::thread;
 use std::time::Duration;
-use crate::circ::{CircHeader, COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, COLOR_PURPLE, COLOR_MASK};
+use crate::circ::{CircHeader, COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, COLOR_PURPLE};
 use once_cell::sync::Lazy;
-use std::collections::HashMap;
 
 #[derive(Clone, Copy)]
 pub struct CircPtr(pub *mut CircHeader);
@@ -160,7 +159,7 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
         // println!();
         if let Some(props) = map.get(&(obj_ptr as usize)) {
             // println!("invoke_trace_fns: found {} dynamic props for {:?}", props.len(), obj_ptr);
-            for (name, &val_tagged) in props.iter() {
+            for (_name, &val_tagged) in props.iter() {
                 // println!("  prop {}: {:x}", name, val_tagged);
                 let rc_tag = val_tagged >> 48;
                 if rc_tag == 0xFFF6 || rc_tag == 0xFFFA || rc_tag == 0xFFF9 || rc_tag == 0xFFFB {
@@ -183,7 +182,7 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
         let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
         if !(*props_slot).is_null() {
             let bx = Box::from_raw(*props_slot);
-            for (name, &val_tagged) in bx.iter() {
+            for (_name, &val_tagged) in bx.iter() {
                 let rc_tag = val_tagged >> 48;
                 if rc_tag == 0xFFF6 || rc_tag == 0xFFFA || rc_tag == 0xFFF9 || rc_tag == 0xFFFB {
                     let unbox_ptr = val_tagged & 0x0000_FFFF_FFFF_FFFF;

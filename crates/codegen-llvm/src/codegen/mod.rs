@@ -618,7 +618,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
                 (self.i64_ty.const_int(0xFFF8, false), print_symbol),
                 (self.i64_ty.const_int(0xFFF9, false), print_closure),
                 (self.i64_ty.const_int(0x7FF9, false), print_closure),
-                (self.i64_ty.const_int(0x7FFC, false), print_obj),
+                (self.i64_ty.const_int(0x7FF6, false), print_obj),
                 (self.i64_ty.const_int(0xFFFE, false), print_obj),
             ],
         ).unwrap();

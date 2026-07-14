@@ -14,7 +14,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         name: &str,
     ) -> CompileResult<CallSiteValue<'ctx>> {
         // If we have an active exception scope, we MUST use invoke
-        if let Some(&(scope_id, catch_bb)) = self.exception_scope_stack.last() {
+        if let Some(&(_scope_id, catch_bb)) = self.exception_scope_stack.last() {
             let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
             let normal_bb = self.ctx.append_basic_block(current_fn, "invoke_normal");
             
@@ -48,7 +48,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         name: &str,
     ) -> CompileResult<CallSiteValue<'ctx>> {
         // If we have an active exception scope, we MUST use invoke
-        if let Some(&(scope_id, catch_bb)) = self.exception_scope_stack.last() {
+        if let Some(&(_scope_id, catch_bb)) = self.exception_scope_stack.last() {
             let current_fn = self.builder.get_insert_block().unwrap().get_parent().unwrap();
             let normal_bb = self.ctx.append_basic_block(current_fn, "invoke_normal");
             

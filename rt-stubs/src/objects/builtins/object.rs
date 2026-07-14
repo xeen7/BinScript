@@ -2,7 +2,7 @@ use crate::core::vtable::{VTable, OBJECT_VTABLE};
 use crate::core::alloc::__bs_alloc;
 use crate::types::coercion::{__bs_Object, __bs_String};
 use crate::types::string_utils::{get_c_string_from_tagged, create_tagged_string};
-use crate::objects::dynamic_props::{DYNAMIC_PROPERTIES, set_dynamic_property, get_dynamic_property};
+use crate::objects::dynamic_props::{set_dynamic_property, get_dynamic_property};
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_new_object() -> u64 {
@@ -29,7 +29,7 @@ pub unsafe extern "C-unwind" fn __bs_Object_new_1(val: u64) -> u64 {
 pub unsafe extern "C-unwind" fn __bs_object_keys(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -90,7 +90,7 @@ pub unsafe extern "C-unwind" fn __bs_object_rest(obj: u64, excluded_arr: u64) ->
     let mut props_to_copy = Vec::new();
 
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -145,7 +145,7 @@ pub unsafe extern "C-unwind" fn __bs_object_rest(obj: u64, excluded_arr: u64) ->
 pub unsafe extern "C-unwind" fn __bs_object_values(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -189,7 +189,7 @@ pub unsafe extern "C-unwind" fn __bs_object_values(obj: u64) -> u64 {
 pub unsafe extern "C-unwind" fn __bs_object_entries(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -242,7 +242,7 @@ pub unsafe extern "C-unwind" fn __bs_object_assign(target: u64, source: u64) -> 
     let source_tag = source & 0xFFFF_0000_0000_0000;
     if target_tag == 0xFFF6_0000_0000_0000 {
         let target_payload = target & 0x0000_FFFF_FFFF_FFFF;
-        let target_ptr = target_payload as *mut u8;
+        let _target_ptr = target_payload as *mut u8;
         if source_tag == 0xFFF6_0000_0000_0000 {
             let source_payload = source & 0x0000_FFFF_FFFF_FFFF;
             let source_ptr = source_payload as *mut u8;
@@ -286,13 +286,13 @@ pub unsafe extern "C-unwind" fn __bs_object_create(proto: u64) -> u64 {
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
     set_dynamic_property(payload as *mut u8, "__proto__".to_string(), proto);
     // Return as TAG_OWNED_OBJECT so the compiler drops it properly
-    payload | 0xFFFC_0000_0000_0000
+    payload | 0x7FF6_0000_0000_0000
 }
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_object_getPrototypeOf(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         if let Some(proto) = get_dynamic_property(obj_ptr, "__proto__") {

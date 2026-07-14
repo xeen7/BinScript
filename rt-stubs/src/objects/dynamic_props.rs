@@ -71,7 +71,7 @@ pub unsafe fn trace_dynamic_properties(obj_ptr: *mut u8) {
             Vec::new()
         }
     };
-    for val in vals {
+    for _val in vals {
         // gc::gc_mark_value(val);
     }
 }

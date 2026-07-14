@@ -127,7 +127,7 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
         libc::printf(b"__bs_prop_get returning undefined (string prop)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
-    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
         libc::printf(b"__bs_prop_get returning undefined (invalid tag)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
@@ -265,7 +265,7 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
         }
         return;
     }
-    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
         return;
     }
     
@@ -323,7 +323,7 @@ pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *
     c_prop[..prop_len as usize].copy_from_slice(std::slice::from_raw_parts(prop_ptr, prop_len as usize));
     libc::printf(b"__bs_prop_set_moved: obj=%p tag=%llx prop=%s val=%llx\n\0".as_ptr() as *const i8, obj_tagged, tag, c_prop.as_ptr() as *const i8, val_tagged);
     
-    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 && tag != 0xFFFC_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 {
         let prop_slice = std::slice::from_raw_parts(prop_ptr, prop_len as usize);
         if let Ok(s) = std::str::from_utf8(prop_slice) {
             if let Ok(idx) = s.parse::<f64>() {
@@ -343,7 +343,7 @@ pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *
     let obj_ptr = payload as *mut u8;
     
     // 1. Check class fields if vtable is present (only objects)
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 {
         let vtable_ptr_ptr = obj_ptr as *const *const crate::VTable;
         let vtable_ptr = *vtable_ptr_ptr;
         if !vtable_ptr.is_null() {
@@ -373,7 +373,7 @@ pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *
 
     // 2. Otherwise set as inline property
     if let Ok(prop_name) = std::str::from_utf8(prop_slice) {
-        if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 {
+        if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 {
             let props_slot = obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64>;
             crate::objects::dynamic_props::set_inline_property_moved(props_slot, prop_name.to_string(), val_tagged);
         } else {

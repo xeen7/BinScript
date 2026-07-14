@@ -80,7 +80,7 @@ unsafe fn stringify_value(val: u64, out: &mut String) {
                 } else {
                     out.push_str(&format!("{}", num));
                 }
-            } else if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+            } else if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
                 // Object
                 out.push('{');
                 let payload = val & 0x0000_FFFF_FFFF_FFFF;

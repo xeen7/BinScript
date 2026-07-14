@@ -132,7 +132,7 @@ pub unsafe extern "C-unwind" fn __bs_in(key: u64, obj: u64) -> u64 {
     let key_str = get_c_string_from_tagged(key_str_tagged);
 
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         
@@ -164,7 +164,7 @@ pub unsafe extern "C-unwind" fn __bs_delete_prop(obj: u64, key: u64) -> u64 {
     let key_str = get_c_string_from_tagged(key_str_tagged);
 
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0xFFFC_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         delete_dynamic_property(obj_ptr, key_str);
