@@ -17,9 +17,9 @@ fn build_regex(pattern_tagged: u64, flags_tagged: u64) -> Option<regex::Regex> {
     regex::Regex::new(&rust_pattern).ok()
 }
 
-pub unsafe extern "C-unwind" fn regexp_test(env: u64, text_tagged: u64) -> u64 {
-    let closure_ptr = (env & 0x0000_FFFF_FFFF_FFFF) as *const u64;
-    let obj_tagged = *(closure_ptr.add(3));
+pub unsafe extern "C-unwind" fn regexp_test(this: u64, text_tagged: u64) -> u64 {
+    let obj_tagged = this;
+    if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { libc::abort(); }
     let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;
     
     let pattern_tagged = crate::objects::dynamic_props::get_dynamic_property(payload as *mut u8, "source").unwrap_or(0xFFF1_0000_0000_0000);
@@ -35,9 +35,9 @@ pub unsafe extern "C-unwind" fn regexp_test(env: u64, text_tagged: u64) -> u64 {
     crate::circ::box_boolean(matched)
 }
 
-pub unsafe extern "C-unwind" fn regexp_exec(env: u64, text_tagged: u64) -> u64 {
-    let closure_ptr = (env & 0x0000_FFFF_FFFF_FFFF) as *const u64;
-    let obj_tagged = *(closure_ptr.add(3));
+pub unsafe extern "C-unwind" fn regexp_exec(this: u64, text_tagged: u64) -> u64 {
+    let obj_tagged = this;
+    if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return 0xFFF2_0000_0000_0000; /* return null if invalid */ }
     let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;
     
     let pattern_tagged = crate::objects::dynamic_props::get_dynamic_property(payload as *mut u8, "source").unwrap_or(0xFFF1_0000_0000_0000);
@@ -74,14 +74,11 @@ pub unsafe extern "C-unwind" fn regexp_exec(env: u64, text_tagged: u64) -> u64 {
 
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_RegExp_new(pattern_tagged: u64, flags_tagged: u64) -> u64 {
-    let obj = crate::__bs_alloc(&crate::REGEXP_VTABLE, 16);
+    crate::core::vtable::__bs_init_regexp_prototype();
+    let obj = crate::__bs_alloc(&crate::core::vtable::REGEXP_VTABLE, 32);
     let payload = obj & 0x0000_FFFF_FFFF_FFFF;
+    crate::objects::dynamic_props::set_dynamic_property(payload as *mut u8, "__proto__".to_string(), crate::core::vtable::REGEXP_PROTOTYPE);
     crate::objects::dynamic_props::set_dynamic_property(payload as *mut u8, "source".to_string(), pattern_tagged);
     crate::objects::dynamic_props::set_dynamic_property(payload as *mut u8, "flags".to_string(), flags_tagged);
-    
-    crate::objects::dynamic_props::set_dynamic_property_moved(payload as *mut u8, "test".to_string(), crate::circ::create_builtin_method(obj, regexp_test as *const u8));
-    crate::objects::dynamic_props::set_dynamic_property_moved(payload as *mut u8, "exec".to_string(), crate::circ::create_builtin_method(obj, regexp_exec as *const u8));
     obj
 }
-
-

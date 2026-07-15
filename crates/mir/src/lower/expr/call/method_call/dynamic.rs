@@ -92,7 +92,7 @@ impl<'a> LowerCtx<'a> {
             // Fallback: load method as a closure from dynamic property and call it
             let fn_reg = self.fresh_reg();
             self.emit(MirInstr::LoadProp(fn_reg, obj_reg, method.to_string()));
-            let mut call_args = vec![MirOperand::Reg(fn_reg)];
+            let mut call_args = vec![MirOperand::Reg(obj_reg)];
             for a in args {
                 call_args.push(self.lower_expr(a)?);
             }

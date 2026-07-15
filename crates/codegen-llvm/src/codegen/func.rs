@@ -437,6 +437,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         let verify_arg = self.i8_ty.const_int(if self.verify_memory { 1 } else { 0 }, false);
         self.builder.build_call(set_verify_fn, &[verify_arg.into()], "set_verify_memory").unwrap();
 
+
+
         // Allocate RAII flag + value slots
         let i1_ty = self.ctx.bool_type();
         for (idx, (reg, release_fn)) in raii_push_sites.iter().enumerate() {
@@ -492,7 +494,21 @@ impl<'ctx> LlvmCodegen<'ctx> {
                     self.builder.build_call(df, &[], "drain_finalizers").unwrap();
                 }
 
+
+
+                let flush_fn = self.module.get_function("__bs_cycle_collector_flush").unwrap_or_else(|| {
+                    let ft = self.ctx.void_type().fn_type(&[], false);
+                    self.module.add_function("__bs_cycle_collector_flush", ft, None)
+                });
+                self.builder.build_call(flush_fn, &[], "flush_final").unwrap();
+
                 if self.verify_memory {
+                    let cleanup_prototypes_fn = self.module.get_function("__bs_cleanup_prototypes").unwrap_or_else(|| {
+                        let ft = self.ctx.void_type().fn_type(&[], false);
+                        self.module.add_function("__bs_cleanup_prototypes", ft, None)
+                    });
+                    self.builder.build_call(cleanup_prototypes_fn, &[], "cleanup_prototypes").unwrap();
+
                     // Drop all JS global variables (they are stored in LLVM i64 globals)
                     // Use __bs_cleanup_tagged which handles both Shared and Owned tags.
                     // IMPORTANT: Only clean up actual JS globals, not internal globals like

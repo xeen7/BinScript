@@ -174,3 +174,75 @@ pub static GENERATOR_RESULT_VTABLE: VTable = VTable {
     drop_fn: None,
     trace_fn: None,
 };
+
+// ===========================================================================
+// Global Prototypes Initialization
+// ===========================================================================
+
+pub static mut MAP_PROTOTYPE: u64 = 0;
+pub static mut SET_PROTOTYPE: u64 = 0;
+pub static mut WEAKMAP_PROTOTYPE: u64 = 0;
+pub static mut WEAKSET_PROTOTYPE: u64 = 0;
+pub static mut REGEXP_PROTOTYPE: u64 = 0;
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_init_map_prototype() {
+    if MAP_PROTOTYPE != 0 { return; }
+    MAP_PROTOTYPE = crate::__bs_alloc(&MAP_VTABLE, 16);
+    let map_payload = MAP_PROTOTYPE & 0x0000_FFFF_FFFF_FFFF;
+    crate::objects::dynamic_props::set_dynamic_property_moved(map_payload as *mut u8, "set".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_set as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(map_payload as *mut u8, "get".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_get as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(map_payload as *mut u8, "has".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_has as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(map_payload as *mut u8, "delete".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_delete as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(map_payload as *mut u8, "clear".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_clear as *const u8));
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_init_set_prototype() {
+    if SET_PROTOTYPE != 0 { return; }
+    SET_PROTOTYPE = crate::__bs_alloc(&SET_VTABLE, 16);
+    let set_payload = SET_PROTOTYPE & 0x0000_FFFF_FFFF_FFFF;
+    crate::objects::dynamic_props::set_dynamic_property_moved(set_payload as *mut u8, "add".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::set::set_add as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(set_payload as *mut u8, "has".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::set::set_has as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(set_payload as *mut u8, "delete".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::set::set_delete as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(set_payload as *mut u8, "clear".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::set::set_clear as *const u8));
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_init_weakmap_prototype() {
+    if WEAKMAP_PROTOTYPE != 0 { return; }
+    WEAKMAP_PROTOTYPE = crate::__bs_alloc(&WEAKMAP_VTABLE, 16);
+    let weakmap_payload = WEAKMAP_PROTOTYPE & 0x0000_FFFF_FFFF_FFFF;
+    crate::objects::dynamic_props::set_dynamic_property_moved(weakmap_payload as *mut u8, "set".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_set as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(weakmap_payload as *mut u8, "get".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_get as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(weakmap_payload as *mut u8, "has".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_has as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(weakmap_payload as *mut u8, "delete".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::map::map_delete as *const u8));
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_init_weakset_prototype() {
+    if WEAKSET_PROTOTYPE != 0 { return; }
+    WEAKSET_PROTOTYPE = crate::__bs_alloc(&WEAKSET_VTABLE, 16);
+    let weakset_payload = WEAKSET_PROTOTYPE & 0x0000_FFFF_FFFF_FFFF;
+    crate::objects::dynamic_props::set_dynamic_property_moved(weakset_payload as *mut u8, "add".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::set::set_add as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(weakset_payload as *mut u8, "has".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::set::set_has as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(weakset_payload as *mut u8, "delete".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::set::set_delete as *const u8));
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_init_regexp_prototype() {
+    if REGEXP_PROTOTYPE != 0 { return; }
+    REGEXP_PROTOTYPE = crate::__bs_alloc(&REGEXP_VTABLE, 16);
+    let regexp_payload = REGEXP_PROTOTYPE & 0x0000_FFFF_FFFF_FFFF;
+    crate::objects::dynamic_props::set_dynamic_property_moved(regexp_payload as *mut u8, "test".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::regexp::regexp_test as *const u8));
+    crate::objects::dynamic_props::set_dynamic_property_moved(regexp_payload as *mut u8, "exec".to_string(), crate::circ::create_builtin_method(0, crate::objects::builtins::regexp::regexp_exec as *const u8));
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_cleanup_prototypes() {
+    crate::circ::circ_dec_tagged(MAP_PROTOTYPE);
+    crate::circ::circ_dec_tagged(SET_PROTOTYPE);
+    crate::circ::circ_dec_tagged(WEAKMAP_PROTOTYPE);
+    crate::circ::circ_dec_tagged(WEAKSET_PROTOTYPE);
+    crate::circ::circ_dec_tagged(REGEXP_PROTOTYPE);
+}
