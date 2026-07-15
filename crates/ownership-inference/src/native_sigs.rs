@@ -142,7 +142,11 @@ impl NativeSignature {
            target.starts_with("__bs_Set_") || target.starts_with("__bs_Map_") || target.starts_with("__bs_WeakMap_") || target.starts_with("__bs_WeakSet_") ||
            target.starts_with("__bs_RegExp_")  {
             sig.is_safe_stub = true;
-            sig.returns_fresh_allocation = true;
+            if target == "__bs_RegExp_escape" {
+                sig.returns_fresh_allocation = false;
+            } else {
+                sig.returns_fresh_allocation = true;
+            }
             return Some(sig);
         }
         

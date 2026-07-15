@@ -351,3 +351,45 @@ pub unsafe extern "C-unwind" fn __bs_cleanup_global_this() {
         GLOBAL_THIS_OBJ = 0;
     }
 }
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_object_hasOwn(obj: u64, prop_tagged: u64) -> u64 {
+    let tag = obj & 0xFFFF_0000_0000_0000;
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
+        let payload = obj & 0x0000_FFFF_FFFF_FFFF;
+        if payload != 0 {
+            let obj_ptr = payload as *mut u8;
+            
+            let prop_str = get_c_string_from_tagged(prop_tagged);
+            
+            // Check vtable
+            let vtable_ptr = *(obj_ptr as *const *const VTable);
+            if !vtable_ptr.is_null() {
+                let vtable = &*vtable_ptr;
+                let fields_count = vtable.fields_count as usize;
+                if fields_count > 0 && !vtable.field_names.is_null() {
+                    for i in 0..fields_count {
+                        let name_ptr = *vtable.field_names.add(i);
+                        if !name_ptr.is_null() {
+                            let name_cstr = std::ffi::CStr::from_ptr(name_ptr as *const libc::c_char);
+                            let name_str = name_cstr.to_str().unwrap_or("");
+                            if name_str == prop_str {
+                                return 0xFFF4_0000_0000_0000; // true
+                            }
+                        }
+                    }
+                }
+            }
+            
+            // Check dynamic properties
+            let props_slot = unsafe { obj_ptr.add(8) as *mut *mut std::collections::HashMap<String, u64> };
+            if !unsafe { *props_slot }.is_null() {
+                let map = unsafe { &**props_slot };
+                if map.contains_key(prop_str) {
+                    return 0xFFF4_0000_0000_0000; // true
+                }
+            }
+        }
+    }
+    0xFFF3_0000_0000_0000 // false
+}

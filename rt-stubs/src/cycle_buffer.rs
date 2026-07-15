@@ -25,7 +25,7 @@ pub unsafe extern "C-unwind" fn __bs_cycle_buffer_push(header_ptr: *mut CircHead
             if b.len() >= CYCLE_BUFFER_HWM {
                 let mut flush_vec = std::mem::take(&mut *b);
                 eprintln!("flush_local: pushing {} items", flush_vec.len());
-            cycle_collector::push_to_global_queue(&mut flush_vec);
+            cycle_collector::push_to_local_queue(&mut flush_vec);
             }
         });
     }
@@ -40,7 +40,7 @@ pub unsafe extern "C-unwind" fn __bs_cycle_buffer_flush_local() {
         if !b.is_empty() {
             let mut flush_vec = std::mem::take(&mut *b);
             eprintln!("flush_local: pushing {} items", flush_vec.len());
-            cycle_collector::push_to_global_queue(&mut flush_vec);
+            cycle_collector::push_to_local_queue(&mut flush_vec);
         }
     });
 }

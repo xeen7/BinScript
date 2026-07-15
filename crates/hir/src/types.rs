@@ -98,6 +98,8 @@ pub enum HirExpr {
     MemberGet { object: Box<HirExpr>, property: String },
     /// Property write: `object.property = value`
     MemberSet { object: Box<HirExpr>, property: String, value: Box<HirExpr> },
+    /// Compound property write: `object.property op= value`
+    CompoundMemberSet { object: Box<HirExpr>, property: String, op: BinOp, value: Box<HirExpr> },
     /// Instantiate a class: `new class_name(...args)`
     New { class_name: String, args: Vec<HirExpr> },
     /// Instanceof check: `expr instanceof class_name`
@@ -123,6 +125,8 @@ pub enum HirExpr {
     IndexGet { object: Box<HirExpr>, index: Box<HirExpr> },
     /// Element/Index write: `object[index] = value`
     IndexSet { object: Box<HirExpr>, index: Box<HirExpr>, value: Box<HirExpr> },
+    /// Compound element/index write: `object[index] op= value`
+    CompoundIndexSet { object: Box<HirExpr>, index: Box<HirExpr>, op: BinOp, value: Box<HirExpr> },
     /// Spread element: `...expr`
     Spread(Box<HirExpr>),
     /// Delete property: `delete object[property]`

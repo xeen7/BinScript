@@ -40,7 +40,7 @@ impl<'a> LowerCtx<'a> {
                 let getter_prop = format!("__get_{}", property);
                 let closure_reg = self.fresh_reg();
                 self.emit(MirInstr::LoadProp(closure_reg, obj_reg, getter_prop));
-                self.emit(MirInstr::CallClosure(dest, closure_reg, vec![MirOperand::Reg(closure_reg)]));
+                self.emit(MirInstr::CallClosure(dest, closure_reg, vec![MirOperand::Reg(closure_reg), MirOperand::Reg(obj_reg)]));
                 return Ok(MirOperand::Reg(dest));
             }
         }

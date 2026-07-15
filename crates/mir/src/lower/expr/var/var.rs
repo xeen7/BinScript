@@ -15,6 +15,7 @@ impl<'a> LowerCtx<'a> {
                 Ok(MirOperand::Reg(reg))
             }
         } else {
+            println!("DEBUG: Unresolved binding {}. Current bindings: {:?}", bid, self.bindings.keys());
             Err(CompileError::Lowering {
                 message: format!("Unresolved binding {}", bid),
             })

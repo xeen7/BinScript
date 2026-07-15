@@ -44,6 +44,14 @@ impl LowerCtx {
             };
             
             if let Some(bin_op) = map_assign_op(a.operator) {
+                if matches!(bin_op, BinOp::And | BinOp::Or | BinOp::NullishCoalescing) {
+                    // Short-circuiting assignment for simple variable: x &&= b -> x && (x = b)
+                    return Ok(HirExpr::BinOp(
+                        bin_op,
+                        Box::new(HirExpr::Var(binding)),
+                        Box::new(HirExpr::Assign { target: binding, value: Box::new(value) })
+                    ));
+                }
                 value = HirExpr::BinOp(bin_op, Box::new(HirExpr::Var(binding)), Box::new(value));
             }
 
@@ -58,14 +66,12 @@ impl LowerCtx {
                 MemberExpression::StaticMemberExpression(prop) => {
                     let prop_name = prop.property.name.to_string();
                     if let Some(bin_op) = map_assign_op(a.operator) {
-                        val = HirExpr::BinOp(
-                            bin_op,
-                            Box::new(HirExpr::MemberGet {
-                                object: Box::new(obj.clone()),
-                                property: prop_name.clone(),
-                            }),
-                            Box::new(val),
-                        );
+                        return Ok(HirExpr::CompoundMemberSet {
+                            object: Box::new(obj),
+                            property: prop_name,
+                            op: bin_op,
+                            value: Box::new(val),
+                        });
                     }
                     Ok(HirExpr::MemberSet {
                         object: Box::new(obj),
@@ -76,14 +82,12 @@ impl LowerCtx {
                 MemberExpression::ComputedMemberExpression(computed) => {
                     let idx = self.lower_expr(&computed.expression)?;
                     if let Some(bin_op) = map_assign_op(a.operator) {
-                        val = HirExpr::BinOp(
-                            bin_op,
-                            Box::new(HirExpr::IndexGet {
-                                object: Box::new(obj.clone()),
-                                index: Box::new(idx.clone()),
-                            }),
-                            Box::new(val),
-                        );
+                        return Ok(HirExpr::CompoundIndexSet {
+                            object: Box::new(obj),
+                            index: Box::new(idx),
+                            op: bin_op,
+                            value: Box::new(val),
+                        });
                     }
                     Ok(HirExpr::IndexSet {
                         object: Box::new(obj),
@@ -94,14 +98,12 @@ impl LowerCtx {
                 MemberExpression::PrivateFieldExpression(pn) => {
                     let prop_name = format!("__private_{}", pn.field.name);
                     if let Some(bin_op) = map_assign_op(a.operator) {
-                        val = HirExpr::BinOp(
-                            bin_op,
-                            Box::new(HirExpr::MemberGet {
-                                object: Box::new(obj.clone()),
-                                property: prop_name.clone(),
-                            }),
-                            Box::new(val),
-                        );
+                        return Ok(HirExpr::CompoundMemberSet {
+                            object: Box::new(obj),
+                            property: prop_name,
+                            op: bin_op,
+                            value: Box::new(val),
+                        });
                     }
                     Ok(HirExpr::MemberSet {
                         object: Box::new(obj),

@@ -27,8 +27,10 @@ impl<'a> LowerCtx<'a> {
             // Object/Property Access
             HirExpr::MemberGet { object, property }        => self.lower_expr_member_get(object, property),
             HirExpr::MemberSet { object, property, value } => self.lower_expr_member_set(object, property, value),
+            HirExpr::CompoundMemberSet { object, property, op, value } => self.lower_expr_compound_member_set(object, property, op, value),
             HirExpr::IndexGet { object, index }            => self.lower_expr_index_get(object, index),
             HirExpr::IndexSet { object, index, value }     => self.lower_expr_index_set(object, index, value),
+            HirExpr::CompoundIndexSet { object, index, op, value } => self.lower_expr_compound_index_set(object, index, op, value),
             HirExpr::DeleteProp { object, property }       => self.lower_expr_delete_prop(object, property),
 
             // Invocations

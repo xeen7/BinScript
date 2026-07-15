@@ -152,6 +152,10 @@ fn walk_expr(expr: &mut HirExpr, func_captures: &HashMap<FuncId, HashSet<Binding
             walk_expr(object, func_captures);
             walk_expr(value, func_captures);
         }
+        HirExpr::CompoundMemberSet { object, value, .. } => {
+            walk_expr(object, func_captures);
+            walk_expr(value, func_captures);
+        }
         HirExpr::New { args, .. } => {
             for arg in args {
                 walk_expr(arg, func_captures);
@@ -191,6 +195,11 @@ fn walk_expr(expr: &mut HirExpr, func_captures: &HashMap<FuncId, HashSet<Binding
             walk_expr(index, func_captures);
         }
         HirExpr::IndexSet { object, index, value } => {
+            walk_expr(object, func_captures);
+            walk_expr(index, func_captures);
+            walk_expr(value, func_captures);
+        }
+        HirExpr::CompoundIndexSet { object, index, value, .. } => {
             walk_expr(object, func_captures);
             walk_expr(index, func_captures);
             walk_expr(value, func_captures);

@@ -15,7 +15,7 @@ impl<'a> LowerCtx<'a> {
                 mir_caps.push(MirOperand::Reg(reg));
             } else {
                 return Err(CompileError::Lowering {
-                    message: format!("Captured binding {} not resolved in bindings", bid),
+                    message: format!("Captured binding {} not resolved in bindings when lowering closure for func {:?}", bid, func_id),
                 });
             }
         }

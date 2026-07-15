@@ -62,6 +62,8 @@ impl LowerCtx {
             Expression::TaggedTemplateExpression(tt) => self.lower_expr_tagged_tpl(tt),
             Expression::ClassExpression(ce) => self.lower_expr_class(ce),
             Expression::Super(_) => self.lower_expr_super_prop(expr),
+            Expression::PrivateInExpression(p) => self.lower_expr_private_in(p),
+            Expression::ImportExpression(i) => self.lower_expr_import(i),
             // TS type assertions just lower the inner expression
             Expression::TSAsExpression(e) => self.lower_expr(&e.expression),
             Expression::TSSatisfiesExpression(e) => self.lower_expr(&e.expression),
@@ -73,5 +75,27 @@ impl LowerCtx {
                 message: format!("Unsupported expression in Stage 3: {:?}", e),
             }),
         }
+    }
+
+    pub(crate) fn lower_expr_private_in(&mut self, p: &oxc::ast::ast::PrivateInExpression<'_>) -> CompileResult<HirExpr> {
+        let right = self.lower_expr(&p.right)?;
+        let left = HirExpr::Lit(crate::types::Literal::String(format!("__private_{}", p.left.name)));
+        Ok(HirExpr::Call {
+            callee: Box::new(HirExpr::GlobalRef("__bs_in".to_string())),
+            args: vec![left, right],
+        })
+    }
+
+    pub(crate) fn lower_expr_import(&mut self, i: &oxc::ast::ast::ImportExpression<'_>) -> CompileResult<HirExpr> {
+        let source = self.lower_expr(&i.source)?;
+        let attributes = if let Some(opt) = &i.options {
+            self.lower_expr(opt)?
+        } else {
+            HirExpr::Lit(crate::types::Literal::Undefined)
+        };
+        Ok(HirExpr::Call {
+            callee: Box::new(HirExpr::GlobalRef("__bs_dynamic_import".to_string())),
+            args: vec![source, attributes],
+        })
     }
 }

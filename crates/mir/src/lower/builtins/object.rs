@@ -10,7 +10,7 @@ impl<'a> LowerCtx<'a> {
         dest: MirReg,
     ) -> CompileResult<bool> {
         match method {
-            "keys" | "values" | "entries" | "assign" | "create" | "getPrototypeOf" | "fromEntries" => {
+            "keys" | "values" | "entries" | "assign" | "create" | "getPrototypeOf" | "fromEntries" | "hasOwn" => {
                 self.emit(MirInstr::CallDirect(
                     dest,
                     format!("__bs_object_{}", method),

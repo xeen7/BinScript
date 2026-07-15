@@ -12,7 +12,7 @@ impl<'a> LowerCtx<'a> {
     ) -> CompileResult<Option<MirOperand>> {
         let expected_args = match method {
             "push" | "join" | "concat" | "forEach" | "map" | "filter" | "find"
-            | "findIndex" | "every" | "some" | "indexOf" | "includes" => 1,
+            | "findIndex" | "every" | "some" | "indexOf" | "includes" | "at" => 1,
             "slice" | "reduce" => 2,
             "fill" => 3,
             "pop" | "reverse" => 0,

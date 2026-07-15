@@ -118,7 +118,7 @@ pub fn stub_version() -> &'static str {
 
 /// Dynamic import runtime stub: returns a resolved Promise containing a fresh empty namespace object.
 #[no_mangle]
-pub unsafe extern "C-unwind" fn __bs_dynamic_import(_specifier: u64) -> u64 {
+pub unsafe extern "C-unwind" fn __bs_dynamic_import(_specifier: u64, _attributes: u64) -> u64 {
     let p = crate::promise::__bs_promise_new();
     let obj = __bs_new_object();
     crate::promise::__bs_promise_resolve(p, obj);

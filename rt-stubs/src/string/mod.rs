@@ -207,3 +207,19 @@ pub unsafe extern "C-unwind" fn __bs_string_includes(str_tagged: u64, search_tag
         0xFFF3_0000_0000_0000 // false
     }
 }
+
+/// `str.at(index)`
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_string_at(str_tagged: u64, index_tagged: u64) -> u64 {
+    let s = crate::get_c_string_from_tagged(str_tagged);
+    let len = s.len() as i64;
+    let mut idx = f64::from_bits(index_tagged) as i64;
+    if idx < 0 {
+        idx += len;
+    }
+    if idx < 0 || idx >= len {
+        return 0xFFF1_0000_0000_0000; // undefined
+    }
+    let char_str = &s[idx as usize..(idx + 1) as usize];
+    crate::create_tagged_string(char_str)
+}

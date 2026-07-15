@@ -86,7 +86,8 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
             false,
         );
         ctx.lower_stmts(&hir.stmts)?;
-        ctx.finish("__bs_script_main", false, false)
+        let has_await = ctx.num_yield_points > 0;
+        ctx.finish("__bs_script_main", false, has_await)
     };
 
     // Collect all top-level global function declaration IDs
@@ -129,10 +130,12 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
             || !f.name.starts_with("__bs_class_")
             || f.name.contains("_static_");
         
+        let mut this_reg_opt = None;
         let env_reg = if is_closure {
             let reg = ctx.fresh_reg();
             params.push((reg, "__env".to_string()));
             let this_reg = ctx.fresh_reg();
+            this_reg_opt = Some(this_reg);
             params.push((this_reg, "__this".to_string()));
             Some(reg)
         } else {
@@ -140,6 +143,7 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
         };
 
         // If it's a closure, load captures from the environment structure
+        println!("DEBUG fn: {}, is_closure: {}, captures: {}", f.name, is_closure, f.captures.len());
         if let Some(env) = env_reg {
             for (i, &bid) in f.captures.iter().enumerate() {
                 let loaded_reg = ctx.fresh_reg();
@@ -154,6 +158,24 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
 
         // Declare standard parameters
         for (bid, name) in &f.params {
+            if name == "this" && is_closure {
+                // If it's a closure, __this is passed implicitly as the second arg.
+                // Bind the AST's 'this' variable to that implicit parameter.
+                ctx.bind(*bid, this_reg_opt.unwrap());
+                if f.name.starts_with("__bs_class_") {
+                    let without_prefix = &f.name["__bs_class_".len()..];
+                    for class_name in classes.keys() {
+                        if without_prefix == format!("{}_constructor", class_name)
+                            || without_prefix.starts_with(&format!("{}_", class_name))
+                        {
+                            ctx.reg_shapes.insert(this_reg_opt.unwrap(), class_name.clone());
+                            break;
+                        }
+                    }
+                }
+                continue;
+            }
+
             let reg = ctx.fresh_reg();
             ctx.bind(*bid, reg);
             if name == "this" && f.name.starts_with("__bs_class_") {

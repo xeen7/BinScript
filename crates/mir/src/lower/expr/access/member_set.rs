@@ -45,7 +45,7 @@ impl<'a> LowerCtx<'a> {
                 let closure_reg = self.fresh_reg();
                 self.emit(MirInstr::LoadProp(closure_reg, obj_reg, setter_prop));
                 let dest = self.fresh_reg();
-                self.emit(MirInstr::CallClosure(dest, closure_reg, vec![MirOperand::Reg(closure_reg), val.clone()]));
+                self.emit(MirInstr::CallClosure(dest, closure_reg, vec![MirOperand::Reg(closure_reg), MirOperand::Reg(obj_reg), val.clone()]));
                 return Ok(val);
             }
         }

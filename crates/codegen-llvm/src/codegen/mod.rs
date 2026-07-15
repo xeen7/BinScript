@@ -179,6 +179,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.funcs.insert(f.name.clone(), fv);
         }
 
+        if mir.main_body.is_async {
+            let ft = self.i64_ty.fn_type(&[], false);
+            let fv = self.module.add_function(&mir.main_body.name, ft, Some(inkwell::module::Linkage::Internal));
+            self.funcs.insert(mir.main_body.name.clone(), fv);
+        }
+
         // Generate RAII drop functions for classes before emitting vtables.
         self.generate_drop_fns()?;
         // Generate trace functions for cycle collector before emitting vtables.
@@ -187,9 +193,12 @@ impl<'ctx> LlvmCodegen<'ctx> {
         // Generate static global vtables (references user functions, drop_fns and trace_fns).
         self.emit_vtables(mir)?;
 
-        // Emit user functions.
         for f in &mir.functions {
             self.emit_function(f)?;
+        }
+
+        if mir.main_body.is_async {
+            self.emit_generator_function(&mir.main_body)?;
         }
 
         // Emit `main` wrapper.
@@ -288,8 +297,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_generator_next", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         // i64 __bs_generator_is_done(i64 gen_ptr) -> i64
         add(self, "__bs_generator_is_done", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
-        // void __bs_drain_microtasks()
-        add(self, "__bs_drain_microtasks", self.void_ty.fn_type(&[], false));
+        // void __bs_execute_async_main(i64 promise)
+        add(self, "__bs_execute_async_main", self.void_ty.fn_type(&[self.i64_ty.into()], false));
         // void __bs_drain_finalizers()
         add(self, "__bs_drain_finalizers", self.void_ty.fn_type(&[], false));
         // i64 __bs_promise_new()
@@ -302,6 +311,8 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_async_drive", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
         // i64 __bs_promise_static_resolve(i64 value_tagged) -> i64 promise
         add(self, "__bs_promise_static_resolve", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
+        // i64 __bs_set_timeout(i64 ms) -> i64 promise
+        add(self, "__bs_set_timeout", self.i64_ty.fn_type(&[self.i64_ty.into()], false));
 
         // --- Promise Combinators ---
         // i64 __bs_promise_all_2(i64 p1_tagged, i64 p2_tagged) -> i64 promise
@@ -387,6 +398,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_Date_new", unary_c);
         add(self, "__bs_Array_new", unary_c);
         add(self, "__bs_RegExp_new", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
+        add(self, "__bs_RegExp_escape", unary_c);
 
         let nullary_c = self.i64_ty.fn_type(&[], false);
         add(self, "__bs_Object_new_0", nullary_c);
@@ -430,6 +442,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_object_create", unary_c);
         add(self, "__bs_object_getPrototypeOf", unary_c);
         add(self, "__bs_object_fromEntries", unary_c);
+        add(self, "__bs_object_hasOwn", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         add(self, "__bs_object_rest", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
 
         // Global URI & globalThis Helpers
@@ -438,7 +451,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_Symbol", unary_c);
         add(self, "__bs_Symbol_0", self.i64_ty.fn_type(&[], false));
         add(self, "__bs_Symbol_1", unary_c);
-        add(self, "__bs_dynamic_import", unary_c);
+        add(self, "__bs_dynamic_import", self.i64_ty.fn_type(&[self.i64_ty.into(), self.i64_ty.into()], false));
         add(self, "__bs_encodeURI", unary_c);
         add(self, "__bs_decodeURI", unary_c);
         add(self, "__bs_encodeURIComponent", unary_c);
@@ -475,6 +488,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         add(self, "__bs_call_slice", dispatch_2);
         add(self, "__bs_call_indexOf", dispatch_1);
         add(self, "__bs_call_includes", dispatch_1);
+        add(self, "__bs_call_at", dispatch_1);
         add(self, "__bs_call_next", dispatch_1);
         add(self, "__bs_call_join", dispatch_1);
         add(self, "__bs_call_reverse", dispatch_0);

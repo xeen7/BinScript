@@ -109,6 +109,8 @@ pub fn link_to_binary(
         }
     }
 
+    println!("Executing Linker Command: {:?}", cmd);
+
     let status = cmd
         .arg("-o")
         .arg(output)

@@ -15,6 +15,8 @@ pub enum BuiltinFn {
     PromiseRace2,
     /// `__bs_json_parse_lazy` — parses JSON lazily.
     JsonParseLazy,
+    /// `sleep` — async timer.
+    Sleep,
     // --- Array built-ins ---
     ArrayNew,
     ArrayFrom,

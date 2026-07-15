@@ -23,6 +23,7 @@ crate::dispatch_1_arg!(__bs_call_push, "push", crate::array::__bs_array_push, du
 crate::dispatch_0_args!(__bs_call_pop, "pop", crate::array::__bs_array_pop, dummy_str_0);
 crate::dispatch_2_args!(__bs_call_slice, "slice", crate::array::__bs_array_slice, crate::string::__bs_string_substring);
 crate::dispatch_1_arg!(__bs_call_includes, "includes", crate::array::__bs_array_includes, crate::string::__bs_string_includes);
+crate::dispatch_1_arg!(__bs_call_at, "at", crate::array::__bs_array_at, crate::string::__bs_string_at);
 crate::dispatch_1_arg!(__bs_call_join, "join", crate::array::__bs_array_join, dummy_str_1);
 crate::dispatch_0_args!(__bs_call_reverse, "reverse", crate::array::__bs_array_reverse, dummy_str_0);
 crate::dispatch_1_arg!(__bs_call_concat, "concat", crate::array::__bs_array_concat, dummy_str_1);

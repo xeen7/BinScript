@@ -133,7 +133,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         Ok(())
     }
 
-    fn emit_generator_function(&mut self, func: &MirFunction) -> CompileResult<()> {
+    pub(crate) fn emit_generator_function(&mut self, func: &MirFunction) -> CompileResult<()> {
         let fv = self.funcs[&func.name];
         let num_args = func.params.len() as u32;
         let _num_locals = func.next_reg;
@@ -402,6 +402,77 @@ impl<'ctx> LlvmCodegen<'ctx> {
         self.regs.clear();
         self.bbs.clear();
 
+        if body.is_async {
+            let entry = self.ctx.append_basic_block(main_fn, "entry");
+            self.builder.position_at_end(entry);
+
+            let cycle_init_fn = self.module.get_function("__bs_cycle_collector_init").unwrap();
+            self.builder.build_call(cycle_init_fn, &[], "init_cycle_collector").unwrap();
+
+            let set_verify_fn = self.module.get_function("__bs_set_verify_memory").unwrap();
+            let verify_arg = self.i8_ty.const_int(if self.verify_memory { 1 } else { 0 }, false);
+            self.builder.build_call(set_verify_fn, &[verify_arg.into()], "set_verify_memory").unwrap();
+
+            let script_main_fn = self.funcs[&body.name];
+            let promise_val = self.builder.build_call(script_main_fn, &[], "call_script_main").unwrap().try_as_basic_value().basic().unwrap();
+
+            let exec_fn = self.module.get_function("__bs_execute_async_main").unwrap();
+            self.builder.build_call(exec_fn, &[promise_val.into()], "execute_async_main").unwrap();
+
+            if let Some(df) = self.module.get_function("__bs_drain_finalizers") {
+                self.builder.build_call(df, &[], "drain_finalizers").unwrap();
+            }
+
+            let flush_fn = self.module.get_function("__bs_cycle_collector_flush").unwrap_or_else(|| {
+                let ft = self.ctx.void_type().fn_type(&[], false);
+                self.module.add_function("__bs_cycle_collector_flush", ft, None)
+            });
+            self.builder.build_call(flush_fn, &[], "flush_final").unwrap();
+
+            if self.verify_memory {
+                let cleanup_prototypes_fn = self.module.get_function("__bs_cleanup_prototypes").unwrap_or_else(|| {
+                    let ft = self.ctx.void_type().fn_type(&[], false);
+                    self.module.add_function("__bs_cleanup_prototypes", ft, None)
+                });
+                self.builder.build_call(cleanup_prototypes_fn, &[], "cleanup_prototypes").unwrap();
+
+                let cleanup_fn = self.module.get_function("__bs_cleanup_tagged").unwrap();
+                let i64_ty = self.i64_ty;
+                let mut globals_to_dec = Vec::new();
+                for global in self.module.get_globals() {
+                    if global.get_value_type().is_int_type() && global.get_value_type().into_int_type() == i64_ty {
+                        let name = global.get_name().to_str().unwrap_or("");
+                        if name.contains("VTABLE")
+                            || name.starts_with("__bs_str_")
+                            || name.starts_with("__bs_field_")
+                            || name.starts_with(".")
+                            || global.is_constant()
+                            || (name.starts_with("__bs_class_") && !name.starts_with("__bs_class_val_"))
+                        {
+                            continue;
+                        }
+                        globals_to_dec.push(global.as_pointer_value());
+                    }
+                }
+                for global_ptr in globals_to_dec {
+                    let val = self.builder.build_load(i64_ty, global_ptr, "global_val").unwrap().into_int_value();
+                    self.builder.build_call(cleanup_fn, &[val.into()], "cleanup_global").unwrap();
+                    self.builder.build_store(global_ptr, self.nan.const_undefined()).unwrap();
+                }
+
+                if let Some(check_leaks) = self.module.get_function("__bs_verify_check_leaks") {
+                    self.builder.build_call(check_leaks, &[], "check_leaks").unwrap();
+                }
+            }
+
+            if let Some(print_rc) = self.module.get_function("__bs_print_rc_stats") {
+                self.builder.build_call(print_rc, &[], "print_rc").unwrap();
+            }
+
+            self.builder.build_return(Some(&self.i32_ty.const_int(0, false))).unwrap();
+            return Ok(());
+        }
+
         for b in &body.blocks {
             let bb = self.ctx.append_basic_block(main_fn, &format!("bb{}", b.id));
             self.bbs.insert(b.id, bb);
@@ -486,9 +557,6 @@ impl<'ctx> LlvmCodegen<'ctx> {
             self.flush_deferred_clears();
             let current_bb = self.builder.get_insert_block().unwrap();
             if current_bb.get_terminator().is_none() {
-                let drain_fn = self.module.get_function("__bs_drain_microtasks").unwrap();
-                self.builder.build_call(drain_fn, &[], "drain").unwrap();
-
                 let drain_finalizers_fn = self.module.get_function("__bs_drain_finalizers");
                 if let Some(df) = drain_finalizers_fn {
                     self.builder.build_call(df, &[], "drain_finalizers").unwrap();

@@ -11,7 +11,7 @@ impl<'a> LowerCtx<'a> {
         args: &[HirExpr],
     ) -> CompileResult<Option<MirOperand>> {
         let expected_args = match method {
-            "charAt" | "charCodeAt" | "startsWith" | "endsWith" | "split" | "repeat" => 1,
+            "charAt" | "charCodeAt" | "startsWith" | "endsWith" | "split" | "repeat" | "at" => 1,
             "substring" | "replace" | "padStart" | "padEnd" => 2,
             "trim" | "toUpperCase" | "toLowerCase" => 0,
             _ => return Ok(None),

@@ -112,6 +112,7 @@ pub fn classify_registers(
                     );
                     
                     let returns_fresh = matches!(builtin,
+                        BuiltinFn::Sleep |
                         BuiltinFn::ArrayMap |
                         BuiltinFn::ArrayFilter |
                         BuiltinFn::ArraySlice |

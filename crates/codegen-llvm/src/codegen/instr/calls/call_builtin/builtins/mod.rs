@@ -14,6 +14,7 @@ mod console;
 mod generator;
 mod json;
 mod promise;
+mod timer;
 
 impl<'ctx> LlvmCodegen<'ctx> {
     pub(in crate::codegen::instr) fn emit_instr_call_builtin(&mut self, instr: &MirInstr) -> CompileResult<()> {
@@ -25,6 +26,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
             BuiltinFn::PromiseAll2 => self.emit_builtin_promise_all_2(d, args)?,
             BuiltinFn::PromiseRace2 => self.emit_builtin_promise_race_2(d, args)?,
             BuiltinFn::JsonParseLazy => self.emit_builtin_json_parse_lazy(d, args)?,
+            BuiltinFn::Sleep => self.emit_builtin_sleep(d, args)?,
             BuiltinFn::ArrayNew => self.emit_builtin_array_new(d, args)?,
             BuiltinFn::ArrayFrom => self.emit_builtin_array_from(d, args)?,
             BuiltinFn::ArrayPush => self.emit_builtin_array_push(d, args)?,

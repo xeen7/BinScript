@@ -1,6 +1,6 @@
-# BinScript — TS/ES2021 Implementation Roadmap
+# BinScript — TS/ES2025 Implementation Roadmap
 
-Visual compliance tracker for BinScript's support of TypeScript and ECMAScript 2021 expressions, statements, class members, and constructs.
+Visual compliance tracker for BinScript's support of TypeScript and ECMAScript 2025 expressions, statements, class members, and constructs.
 
 ---
 
@@ -17,15 +17,16 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 
 | Category | Total | 🟢 Done | 🟡 Partly | 🔴 Not yet | Progress |
 | --- | --- | --- | --- | --- | --- |
-| 1. Expressions | 87 | 87 | 0 | 0 | 100% |
-| 2. Statements | 53 | 53 | 0 | 0 | 100% |
-| 3. Class Body Members | 19 | 19 | 0 | 0 | 100% |
+| 1. Expressions | 97 | 93 | 0 | 4 | 95% |
+| 2. Statements | 57 | 55 | 0 | 2 | 96% |
+| 3. Class Body Members | 20 | 20 | 0 | 0 | 100% |
 | 4. Type System Constructs | 22 | 22 | 0 | 0 | 100% |
 | 5. Pattern Syntax | 6 | 6 | 0 | 0 | 100% |
-| 6. Built-in Standard Library | 9 | 9 | 0 | 0 | 100% |
+| 6. Built-in Standard Library | 13 | 9 | 0 | 4 | 69% |
 | 7. Compiler Architecture | 2 | 2 | 0 | 0 | 100% |
-| Appendix. Special Values | 9 | 9 | 0 | 0 | 100% |
-| **Overall** | **207** | **207** | **0** | **0** | **100%** |
+| Appendix A. Special Values | 9 | 9 | 0 | 0 | 100% |
+| Appendix B. Looking Ahead (ES2026) | 5 | 0 | 0 | 5 | 0% |
+| **Overall** | **231** | **216** | **0** | **15** | **93%** |
 
 ---
 
@@ -122,6 +123,9 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | Spread (in calls) | `fn(...x)` | 🟢 Done | Fully supported for both closures and class methods via dynamic packing and dispatch helpers. |
 | Grouping | `(expr)` | 🟢 Done | Lowered to inner expression in `paren.rs`. |
 | Sequence | `(a, b, c)` | 🟢 Done | Lowered to sequential sequence expression in `seq.rs`. |
+| Logical AND assignment | `a &&= b` | 🔴 Not yet | ES2021 |
+| Logical OR assignment | `a \|\|= b` | 🔴 Not yet | ES2021 |
+| Nullish assignment | `a ??= b` | 🔴 Not yet | ES2021 |
 
 ### 1.5 Destructuring Expressions
 
@@ -161,6 +165,18 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | Feature | Syntax | Status | Notes |
 | --- | --- | --- | --- |
 | Dynamic import | `import("./mod")` | 🟢 Done | Lowered to runtime helper returning a resolved Promise resolving to a module namespace object. |
+| Dynamic import w/ attrs | `import("", { with: {} })`| 🔴 Not yet | ES2025 |
+
+### 1.9 New Expression Forms (ES2022–ES2025)
+
+| Feature | Syntax | Status | Notes |
+| --- | --- | --- | --- |
+| Private field `in` | `#x in obj` | 🔴 Not yet | ES2022 |
+| Top-level `await` expr | `await fetch(url)` | 🟢 Done | Main wrapper uses event loop polling with deadlock detection |
+| RegExp `v` flag | `/pattern/v` | 🟢 Done | Natively handled by underlying regex engine |
+| RegExp duplicate named | `/(?<y>\d)-|(?<y>\d)/` | 🟢 Done | Stripped before rust regex compilation |
+| RegExp inline modifiers| `/(?i:x)/` | 🟢 Done | Natively handled by underlying regex engine |
+| `RegExp.escape()` | `RegExp.escape(str)` | 🟢 Done | Static builtin method implemented in rt-stubs |
 
 ---
 
@@ -248,6 +264,8 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | Side-effect import | `import "./poly";` | 🟢 Done | Mapped to pre-resolved imports. |
 | Type-only import `[TS]` | `import type { F } from "m"` | 🔵 Done (Erased) | Erased by SWC parser/transform. |
 | Type-only export `[TS]` | `export type { F };` | 🔵 Done (Erased) | Erased by SWC parser/transform. |
+| Import attributes | `import x from "m" with {}` | 🔴 Not yet | ES2025 |
+| Re-export attributes | `export { x } from "m" with {}` | 🔴 Not yet | ES2025 |
 
 ### 2.8 Labeled Statement
 
@@ -265,6 +283,8 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | Empty statement | `;` | 🟢 Done | Mapped in `empty.rs`. |
 | `debugger` statement | `debugger;` | 🟢 Done | Handled in `lower_stmt` as a compile-time no-op. |
 | `"use strict"` directive | `"use strict";` | 🟢 Done | Parsed as standard expression statement no-op, or handled at SWC parse-level. |
+| Hashbang comment | `#!/usr/bin/env node` | 🟢 Done | Ignored by parser natively |
+| Top-level `await` stmt | `await import("m");` | 🟢 Done | Main wrapper uses event loop polling with deadlock detection |
 
 ---
 
@@ -283,6 +303,7 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | Private field | `#secret = 42;` | 🟢 Done | Mapped to standard property with prefix `__private_` in `member.rs` and `assign.rs`. |
 | Private method | `#helper() {}` | 🟢 Done | Mapped to class methods prefixed with `__private_` in `decl.rs`. |
 | Static private field | `static #count = 0;` | 🟢 Done | Mapped to static fields prefixed with `__private_` in `decl.rs`. |
+
 | Static block | `static {}` | 🟢 Done | Lowered directly at the end of the class declaration block, with the local `this` mapping to the class constructor object. |
 | Abstract method `[TS]` | `abstract speak();` | 🔵 Done (Erased) | Erased by SWC parser/transform. |
 | Abstract field `[TS]` | `abstract name: str;` | 🔵 Done (Erased) | Erased by SWC parser/transform. |
@@ -291,6 +312,7 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | Parameter prop `[TS]` | `constructor(public x)` | 🟣 Done (Transpiled) | SWC down-transpiles to standard field declarations and constructor assignments. |
 | Override modifier `[TS]` | `override speak() {}` | 🔵 Done (Erased) | Erased by SWC parser/transform. |
 | Decorator `[TS]` | `@sealed class C {}` | 🟢 Done | Parsed by SWC and bypassed in HIR class lowering (compiles as undecorated classes). |
+| Accessor field `[TS]` | `accessor name = "";` | 🟢 Done | Desugared to private field, getter, and setter |
 
 ---
 
@@ -338,7 +360,7 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 
 ---
 
-## 6. Built-in Standard Library (ES2021)
+## 6. Built-in Standard Library (ES2021–ES2025)
 
 | Feature | Status | Notes |
 | --- | --- | --- |
@@ -351,6 +373,10 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | `RegExp` objects | 🟢 Done | Basic instantiation, bound to `REGEXP_VTABLE`. |
 | `JSON` object | 🟢 Done | `stringify()` and `parse()` functional, properly serializing array and object fields dynamically. |
 | `instanceof` Built-in Support | 🟢 Done | Compiler natively maps built-ins to static internal shape IDs for accurate `instanceof` type checks. |
+| ES2022 Built-ins | 🔴 Not yet | `at()`, `hasOwn()`, `structuredClone()`, `Error` cause |
+| ES2023 Built-ins | 🔴 Not yet | `findLast()`, non-mutating array methods, `WeakMap` symbol keys |
+| ES2024 Built-ins | 🔴 Not yet | `groupBy()`, `Promise.withResolvers()`, Atomics, Buffer resize |
+| ES2025 Built-ins | 🔴 Not yet | `Iterator` global, `Set` methods, `Promise.try()`, `Float16Array` |
 
 ---
 
@@ -363,7 +389,7 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 
 ---
 
-## Appendix — Special Values & Keywords
+## Appendix A. Special Values & Keywords
 
 | Feature | Status | Notes |
 | --- | --- | --- |
@@ -376,3 +402,25 @@ BinScript uses the **SWC pipeline** (parse → resolve → strip TS types → hy
 | `Symbol.hasInstance` | 🟢 Done | Well-known hasInstance symbol defined on global Symbol object. |
 | `Symbol.toPrimitive` | 🟢 Done | Well-known toPrimitive symbol defined on global Symbol object. |
 | `Symbol.toStringTag` | 🟢 Done | Well-known toStringTag symbol defined on global Symbol object. |
+
+---
+
+## Appendix B. Looking Ahead (ES2026)
+
+| Feature | Syntax | Status | Notes |
+| --- | --- | --- | --- |
+| `using` declaration | `using x = ...` | 🔴 Not yet | Stage 4 |
+| `await using` decl | `await using x = ...` | 🔴 Not yet | Stage 4 |
+| `Temporal` global | `Temporal.PlainDate...` | 🔴 Not yet | Stage 4 |
+| `Array.fromAsync()` | `Array.fromAsync(...)` | 🔴 Not yet | Stage 4 |
+| `Error.isError()` | `Error.isError(x)` | 🔴 Not yet | Stage 4 |
+
+## Appendix C. BinScript Native Concurrency
+Unlike standard JavaScript engines which rely on a single-threaded Event Loop, BinScript implements a Go/Tokio-style M:N Work-Stealing scheduler.
+
+| Architecture | Component | Status | Notes |
+| --- | --- | --- | --- |
+| Lock-Free Queues | `crossbeam-deque` | 🟢 Done | Replaced global mutex with an `Injector` and per-thread `Worker` queues. |
+| Work Stealing | `steal_batch_and_pop` | 🟢 Done | Threads steal from the global queue or peer queues before parking. |
+| Non-blocking I/O | `mio` Reactor | 🟢 Done | A dedicated background thread uses `epoll/kqueue` to wake parked executor threads when timers/sockets are ready. |
+| Top-Level Await | TLA Deadlock Detection | 🟢 Done | Engine successfully detects deadlocks if all queues are empty and no I/O is pending. |

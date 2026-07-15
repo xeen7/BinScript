@@ -55,7 +55,10 @@ impl<'a> LowerCtx<'a> {
                     return Ok(MirOperand::Reg(dest));
                 }
 
-                let fn_name = if name == "parseInt" {
+                let fn_name = if name == "sleep" {
+                    self.emit(MirInstr::CallBuiltin(dest, BuiltinFn::Sleep, mir_args));
+                    return Ok(MirOperand::Reg(dest));
+                } else if name == "parseInt" {
                     if mir_args.len() == 1 {
                         "__bs_parseInt_1".to_string()
                     } else {

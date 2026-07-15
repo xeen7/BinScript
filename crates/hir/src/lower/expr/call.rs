@@ -219,6 +219,18 @@ impl LowerCtx {
                         }
                     }
 
+                    if obj_name == "RegExp" && prop_name == "escape" {
+                        let arg = if args.is_empty() {
+                            HirExpr::Lit(Literal::Undefined)
+                        } else {
+                            args[0].clone()
+                        };
+                        return Ok(HirExpr::Call {
+                            callee: Box::new(HirExpr::GlobalRef("__bs_RegExp_escape".to_string())),
+                            args: vec![arg],
+                        });
+                    }
+
                     if obj_name == "console" || obj_name == "Math" || obj_name == "Promise" || obj_name == "JSON" || obj_name == "Number" || obj_name == "Object" || obj_name == "String" || obj_name == "Date" {
                         return Ok(HirExpr::MemberCall {
                             object: obj_name,

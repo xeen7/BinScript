@@ -1,73 +1,37 @@
-use std::sync::{Mutex, Condvar, Arc};
-use std::thread;
-use std::time::Duration;
+use std::cell::RefCell;
 use crate::circ::{CircHeader, COLOR_BLACK, COLOR_GRAY, COLOR_WHITE, COLOR_PURPLE};
-use once_cell::sync::Lazy;
 
 #[derive(Clone, Copy)]
 pub struct CircPtr(pub *mut CircHeader);
-unsafe impl Send for CircPtr {}
 
-static COLLECTOR_STATE: Lazy<Arc<(Mutex<(Vec<CircPtr>, bool)>, Condvar)>> = Lazy::new(|| {
-    Arc::new((Mutex::new((Vec::new(), false)), Condvar::new()))
-});
+thread_local! {
+    static LOCAL_GARBAGE: RefCell<Vec<CircPtr>> = RefCell::new(Vec::new());
+}
 
 #[no_mangle]
 pub extern "C-unwind" fn __bs_cycle_collector_init() {
-    let _state = Arc::clone(&COLLECTOR_STATE);
-    thread::spawn(move || {
-        loop {
-            let mut work_list = Vec::new();
-            {
-                let (lock, cvar) = &**COLLECTOR_STATE;
-                let mut state_guard = lock.lock().unwrap();
-                while state_guard.0.is_empty() {
-                    state_guard.1 = false;
-                    cvar.notify_all();
-                    let result = cvar.wait_timeout(state_guard, Duration::from_millis(5)).unwrap();
-                    state_guard = result.0;
-                    if result.1.timed_out() {
-                        break;
-                    }
-                }
-                std::mem::swap(&mut work_list, &mut state_guard.0);
-                state_guard.1 = true;
-            }
-
-            if !work_list.is_empty() {
-                collect_cycles(work_list);
-            }
-            
-            {
-                let (lock, cvar) = &**COLLECTOR_STATE;
-                let mut state_guard = lock.lock().unwrap();
-                state_guard.1 = false;
-                cvar.notify_all();
-            }
-        }
-    });
+    // Thread-local garbage collection doesn't need a global background thread
 }
 
-pub fn push_to_global_queue(batch: &mut Vec<*mut CircHeader>) {
-    let (lock, cvar) = &**COLLECTOR_STATE;
-    let mut state_guard = lock.lock().unwrap();
-    state_guard.0.extend(batch.iter().map(|&p| CircPtr(p)));
-    if state_guard.0.len() > 1000 {
-        cvar.notify_one();
-    }
+pub fn push_to_local_queue(batch: &mut Vec<*mut CircHeader>) {
+    LOCAL_GARBAGE.with(|garbage| {
+        let mut g = garbage.borrow_mut();
+        g.extend(batch.iter().map(|&p| CircPtr(p)));
+    });
 }
 
 #[no_mangle]
 pub extern "C-unwind" fn __bs_cycle_collector_flush() {
-    eprintln!("__bs_cycle_collector_flush called");
-    let (lock, cvar) = &**COLLECTOR_STATE;
-    cvar.notify_one();
-    let mut state_guard = lock.lock().unwrap();
-    while !state_guard.0.is_empty() || state_guard.1 {
-        state_guard = cvar.wait(state_guard).unwrap();
+    // eprintln!("__bs_cycle_collector_flush called");
+    let mut work_list = Vec::new();
+    LOCAL_GARBAGE.with(|garbage| {
+        std::mem::swap(&mut work_list, &mut garbage.borrow_mut());
+    });
+    
+    if !work_list.is_empty() {
+        collect_cycles(work_list);
     }
 }
-
 
 // ── Bacon-Rajan Cycle Collection (BiRC-safe) ──────────────────────────────
 //

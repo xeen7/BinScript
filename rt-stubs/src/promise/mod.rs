@@ -1,5 +1,6 @@
 pub mod combinators;
 pub mod microtask;
+pub mod reactor;
 use crate::promise::microtask::enqueue_microtask;
 use std::sync::Mutex;
 
@@ -56,6 +57,9 @@ pub unsafe extern "C-unwind" fn __bs_promise_resolve(promise_tagged: u64, value:
             cb(value);
         });
     }
+    
+    // Wake up any threads blocked waiting for tasks (e.g., the main thread waiting on this root promise)
+    crate::promise::microtask::wake_all_microtasks();
 }
 
 pub unsafe fn add_internal_then(promise_tagged: u64, cb: PromiseCallback) {
@@ -116,5 +120,16 @@ unsafe fn __bs_async_step(gen_tagged: u64, sent_val: u64, return_promise: u64) {
         enqueue_microtask(move || {
             unsafe { __bs_async_step(gen_tagged, yielded_val, return_promise); }
         });
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_promise_state(promise_tagged: u64) -> u32 {
+    let ptr = (promise_tagged & 0x0000_FFFF_FFFF_FFFF) as *mut Mutex<Promise>;
+    let p = (*ptr).lock().unwrap();
+    match p.state {
+        PromiseState::Pending => 0,
+        PromiseState::Fulfilled(_) => 1,
+        PromiseState::Rejected(_) => 2,
     }
 }

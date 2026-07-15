@@ -680,3 +680,21 @@ unsafe extern "C-unwind" fn drop_arena_array(ptr: *mut u8) {
         (*arr).data = std::ptr::null_mut();
     }
 }
+
+/// `arr.at(index)` — get element at relative index.
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_array_at(arr_tagged: u64, index_tagged: u64) -> u64 {
+    let arr = untag_array(arr_tagged);
+    if arr.is_null() { return 0xFFF1_0000_0000_0000; }
+    let mut idx = f64::from_bits(index_tagged) as i64;
+    let len = (*arr).length as i64;
+    if idx < 0 {
+        idx += len;
+    }
+    if idx < 0 || idx >= len {
+        return 0xFFF1_0000_0000_0000; // undefined
+    }
+    let val = *(*arr).data.add(idx as usize);
+    crate::circ::circ_inc_tagged(val);
+    val
+}

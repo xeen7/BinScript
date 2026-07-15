@@ -177,6 +177,36 @@ impl LowerCtx {
                         static_fields.push((name, init));
                     }
                 }
+                ClassElement::AccessorProperty(acc) => {
+                    let base_name = self.prop_name_to_string(&acc.key);
+                    let private_name = format!("__private_{}", base_name);
+                    let get_name = format!("__get_{}", base_name);
+                    let set_name = format!("__set_{}", base_name);
+                    let get_func_id = self.fresh_func_id();
+                    let set_func_id = self.fresh_func_id();
+
+                    let init = match &acc.value {
+                        Some(e) => Some(self.lower_expr(e)?),
+                        None => None,
+                    };
+
+                    if !acc.r#static {
+                        own_fields.push((private_name.clone(), HirType::Any));
+                        instance_field_inits.push((private_name, init));
+
+                        getters.push(base_name.clone());
+                        setters.push(base_name.clone());
+                        methods.push(HirMethod { name: get_name, func_id: get_func_id });
+                        methods.push(HirMethod { name: set_name, func_id: set_func_id });
+                    } else {
+                        static_fields.push((private_name, init));
+
+                        static_getters.push(base_name.clone());
+                        static_setters.push(base_name.clone());
+                        static_methods.push(HirMethod { name: get_name, func_id: get_func_id });
+                        static_methods.push(HirMethod { name: set_name, func_id: set_func_id });
+                    }
+                }
                 ClassElement::MethodDefinition(method) => {
                     if method.kind == MethodDefinitionKind::Constructor {
                         explicit_constructor = Some(method);
@@ -353,6 +383,54 @@ impl LowerCtx {
                         is_async: m.value.r#async,
                     });
                 }
+            } else if let ClassElement::AccessorProperty(acc) = member {
+                if !acc.r#static {
+                    let base_name = self.prop_name_to_string(&acc.key);
+                    let private_name = format!("__private_{}", base_name);
+                    let get_name = format!("__get_{}", base_name);
+                    let set_name = format!("__set_{}", base_name);
+
+                    let get_func = methods.iter().find(|meth| meth.name == get_name).unwrap();
+                    let set_func = methods.iter().find(|meth| meth.name == set_name).unwrap();
+
+                    let get_func_name = format!("__bs_class_{}_{}", class_name, get_name);
+                    self.push_scope();
+                    let this_id = self.declare("this");
+                    let get_body = vec![HirStmt::Return(Some(HirExpr::MemberGet {
+                        object: Box::new(HirExpr::Var(this_id)),
+                        property: private_name.clone(),
+                    }))];
+                    self.pop_scope();
+                    self.functions.push(HirFunction {
+                        id: get_func.func_id,
+                        name: get_func_name,
+                        params: vec![(this_id, "this".to_string())],
+                        body: get_body,
+                        captures: Vec::new(),
+                        is_generator: false,
+                        is_async: false,
+                    });
+
+                    let set_func_name = format!("__bs_class_{}_{}", class_name, set_name);
+                    self.push_scope();
+                    let this_id_set = self.declare("this");
+                    let val_id = self.declare("v");
+                    let set_body = vec![HirStmt::Expr(HirExpr::MemberSet {
+                        object: Box::new(HirExpr::Var(this_id_set)),
+                        property: private_name.clone(),
+                        value: Box::new(HirExpr::Var(val_id)),
+                    })];
+                    self.pop_scope();
+                    self.functions.push(HirFunction {
+                        id: set_func.func_id,
+                        name: set_func_name,
+                        params: vec![(this_id_set, "this".to_string()), (val_id, "v".to_string())],
+                        body: set_body,
+                        captures: Vec::new(),
+                        is_generator: false,
+                        is_async: false,
+                    });
+                }
             }
         }
 
@@ -395,6 +473,54 @@ impl LowerCtx {
                         captures: Vec::new(),
                         is_generator: m.value.generator,
                         is_async: m.value.r#async,
+                    });
+                }
+            } else if let ClassElement::AccessorProperty(acc) = member {
+                if acc.r#static {
+                    let base_name = self.prop_name_to_string(&acc.key);
+                    let private_name = format!("__private_{}", base_name);
+                    let get_name = format!("__get_{}", base_name);
+                    let set_name = format!("__set_{}", base_name);
+
+                    let get_func = static_methods.iter().find(|meth| meth.name == get_name).unwrap();
+                    let set_func = static_methods.iter().find(|meth| meth.name == set_name).unwrap();
+
+                    let get_func_name = format!("__bs_class_{}_static_{}", class_name, get_name);
+                    self.push_scope();
+                    let this_id = self.declare("this");
+                    let get_body = vec![HirStmt::Return(Some(HirExpr::MemberGet {
+                        object: Box::new(HirExpr::Var(this_id)),
+                        property: private_name.clone(),
+                    }))];
+                    self.pop_scope();
+                    self.functions.push(HirFunction {
+                        id: get_func.func_id,
+                        name: get_func_name,
+                        params: vec![(this_id, "this".to_string())],
+                        body: get_body,
+                        captures: Vec::new(),
+                        is_generator: false,
+                        is_async: false,
+                    });
+
+                    let set_func_name = format!("__bs_class_{}_static_{}", class_name, set_name);
+                    self.push_scope();
+                    let this_id_set = self.declare("this");
+                    let val_id = self.declare("v");
+                    let set_body = vec![HirStmt::Expr(HirExpr::MemberSet {
+                        object: Box::new(HirExpr::Var(this_id_set)),
+                        property: private_name.clone(),
+                        value: Box::new(HirExpr::Var(val_id)),
+                    })];
+                    self.pop_scope();
+                    self.functions.push(HirFunction {
+                        id: set_func.func_id,
+                        name: set_func_name,
+                        params: vec![(this_id_set, "this".to_string()), (val_id, "v".to_string())],
+                        body: set_body,
+                        captures: Vec::new(),
+                        is_generator: false,
+                        is_async: false,
                     });
                 }
             }

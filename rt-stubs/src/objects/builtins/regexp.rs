@@ -9,7 +9,43 @@ fn build_regex(pattern_tagged: u64, flags_tagged: u64) -> Option<regex::Regex> {
         flags_str = unsafe { crate::get_c_string_from_tagged(flags_tagged).to_string() };
     }
     
-    let mut rust_pattern = pattern_str.to_string();
+    // Strip named capture groups `(?<name>` -> `(` since the rust `regex` crate doesn't support duplicate named capture groups
+    let mut clean_pat = String::with_capacity(pattern_str.len());
+    let mut chars = pattern_str.chars().peekable();
+    let mut escaped = false;
+    while let Some(c) = chars.next() {
+        if escaped {
+            clean_pat.push(c);
+            escaped = false;
+        } else if c == '\\' {
+            clean_pat.push(c);
+            escaped = true;
+        } else if c == '(' && chars.peek() == Some(&'?') {
+            chars.next(); // consume '?'
+            if chars.peek() == Some(&'<') {
+                chars.next(); // consume '<'
+                let mut found_close = false;
+                while let Some(&n) = chars.peek() {
+                    chars.next();
+                    if n == '>' {
+                        found_close = true;
+                        break;
+                    }
+                }
+                if found_close {
+                    clean_pat.push('(');
+                } else {
+                    clean_pat.push_str("(?<");
+                }
+            } else {
+                clean_pat.push_str("(?");
+            }
+        } else {
+            clean_pat.push(c);
+        }
+    }
+    
+    let mut rust_pattern = clean_pat;
     if flags_str.contains('i') {
         rust_pattern = format!("(?i){}", rust_pattern);
     }
@@ -81,4 +117,25 @@ pub unsafe extern "C-unwind" fn __bs_RegExp_new(pattern_tagged: u64, flags_tagge
     crate::objects::dynamic_props::set_dynamic_property(payload as *mut u8, "source".to_string(), pattern_tagged);
     crate::objects::dynamic_props::set_dynamic_property(payload as *mut u8, "flags".to_string(), flags_tagged);
     obj
+}
+
+#[no_mangle]
+pub unsafe extern "C-unwind" fn __bs_RegExp_escape(str_tagged: u64) -> u64 {
+    // ES2025 RegExp.escape
+    // Escapes syntax characters so the string can be used literally in a pattern.
+    let text = crate::get_c_string_from_tagged(str_tagged).to_string();
+    
+    let mut escaped = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            // Characters that need to be escaped in ES RegExp patterns
+            '^' | '$' | '\\' | '.' | '*' | '+' | '?' | '(' | ')' | '[' | ']' | '{' | '}' | '|' | '/' => {
+                escaped.push('\\');
+                escaped.push(c);
+            }
+            _ => escaped.push(c),
+        }
+    }
+    
+    crate::create_tagged_string(&escaped)
 }
