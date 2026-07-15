@@ -162,7 +162,7 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
             for (_name, &val_tagged) in props.iter() {
                 // println!("  prop {}: {:x}", name, val_tagged);
                 let rc_tag = val_tagged >> 48;
-                if rc_tag == 0xFFF6 || rc_tag == 0xFFFA || rc_tag == 0xFFF9 || rc_tag == 0xFFFB || rc_tag == 0xFFFE || rc_tag == 0x7FF6 || rc_tag == 0x7FFA || rc_tag == 0x7FF9 || rc_tag == 0x7FFB || rc_tag == 0x7FFE {
+                if rc_tag == 0xFFF6 || rc_tag == 0xFFF9 || rc_tag == 0xFFFA || rc_tag == 0xFFFB || rc_tag == 0x7FFE {
                     let unbox_ptr = val_tagged & 0x0000_FFFF_FFFF_FFFF;
                     let raw_ptr = unbox_ptr as *mut u8;
                     if !raw_ptr.is_null() {
@@ -184,7 +184,7 @@ unsafe fn invoke_trace_fns(header_ptr: *mut CircHeader, visitor: *const ()) {
             let bx = Box::from_raw(*props_slot);
             for (_name, &val_tagged) in bx.iter() {
                 let rc_tag = val_tagged >> 48;
-                if rc_tag == 0xFFF6 || rc_tag == 0xFFFA || rc_tag == 0xFFF9 || rc_tag == 0xFFFB || rc_tag == 0xFFFE || rc_tag == 0x7FF6 || rc_tag == 0x7FFA || rc_tag == 0x7FF9 || rc_tag == 0x7FFB || rc_tag == 0x7FFE {
+                if rc_tag == 0xFFF6 || rc_tag == 0xFFF9 || rc_tag == 0xFFFA || rc_tag == 0xFFFB || rc_tag == 0x7FFE {
                     let unbox_ptr = val_tagged & 0x0000_FFFF_FFFF_FFFF;
                     let raw_ptr = unbox_ptr as *mut u8;
                     if !raw_ptr.is_null() {
@@ -352,7 +352,7 @@ unsafe fn collect_white(s: *mut CircHeader) {
         
         crate::objects::dynamic_props::remove_dynamic_properties_only(obj_ptr);
         crate::verify::__bs_verify_track_free(obj_ptr);
-
+        crate::circ::SHARED_FREES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         let size = (*s).alloc_size;
         crate::slab::fast_free_shared(s as *mut u8, size);
     }

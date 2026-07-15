@@ -323,7 +323,7 @@ pub fn is_managed_ptr(val: u64) -> bool {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn circ_inc_tagged(val: u64) {
     let rc_tag = val >> 48;
-    if rc_tag == 0xFFF6 || rc_tag == 0xFFFA || rc_tag == 0xFFF9 || rc_tag == 0xFFFB || rc_tag == 0xFFFE || rc_tag == 0x7FF6 || rc_tag == 0x7FFA || rc_tag == 0x7FF9 || rc_tag == 0x7FFB || rc_tag == 0x7FFE {
+    if rc_tag == 0xFFF6 || rc_tag == 0xFFF9 || rc_tag == 0xFFFA || rc_tag == 0xFFFB || rc_tag == 0x7FFE {
         let unbox_ptr = val & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = unbox_ptr as *mut u8;
         if !obj_ptr.is_null() {
@@ -336,7 +336,7 @@ pub unsafe extern "C-unwind" fn circ_inc_tagged(val: u64) {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn circ_dec_tagged(val: u64) {
     let rc_tag = val >> 48;
-    if rc_tag == 0xFFF6 || rc_tag == 0xFFFA || rc_tag == 0xFFF9 || rc_tag == 0xFFFB || rc_tag == 0xFFFE || rc_tag == 0x7FF6 || rc_tag == 0x7FFA || rc_tag == 0x7FF9 || rc_tag == 0x7FFB || rc_tag == 0x7FFE {
+    if rc_tag == 0xFFF6 || rc_tag == 0xFFF9 || rc_tag == 0xFFFA || rc_tag == 0xFFFB || rc_tag == 0x7FFE {
         let unbox_ptr = val & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = unbox_ptr as *mut u8;
         if !obj_ptr.is_null() {
@@ -368,7 +368,7 @@ pub unsafe extern "C-unwind" fn builtin_method_drop(obj_ptr: *mut u8) {
 pub unsafe extern "C-unwind" fn builtin_method_trace(obj_ptr: *mut u8, visitor: *const ()) {
     let captured_tagged = *(obj_ptr.add(24) as *mut u64);
     let rc_tag = captured_tagged >> 48;
-    if rc_tag == 0xFFF6 || rc_tag == 0xFFFA || rc_tag == 0xFFF9 || rc_tag == 0xFFFB || rc_tag == 0xFFFE || rc_tag == 0x7FF6 || rc_tag == 0x7FFA || rc_tag == 0x7FF9 || rc_tag == 0x7FFB || rc_tag == 0x7FFE {
+    if rc_tag == 0xFFF6 || rc_tag == 0xFFF9 || rc_tag == 0xFFFA || rc_tag == 0xFFFB || rc_tag == 0x7FFE {
         let unbox_ptr = captured_tagged & 0x0000_FFFF_FFFF_FFFF;
         let raw_ptr = unbox_ptr as *mut u8;
         if !raw_ptr.is_null() {
