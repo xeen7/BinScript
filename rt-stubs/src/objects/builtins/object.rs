@@ -29,7 +29,7 @@ pub unsafe extern "C-unwind" fn __bs_Object_new_1(val: u64) -> u64 {
 pub unsafe extern "C-unwind" fn __bs_object_keys(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -90,7 +90,7 @@ pub unsafe extern "C-unwind" fn __bs_object_rest(obj: u64, excluded_arr: u64) ->
     let mut props_to_copy = Vec::new();
 
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -145,7 +145,7 @@ pub unsafe extern "C-unwind" fn __bs_object_rest(obj: u64, excluded_arr: u64) ->
 pub unsafe extern "C-unwind" fn __bs_object_values(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -189,7 +189,7 @@ pub unsafe extern "C-unwind" fn __bs_object_values(obj: u64) -> u64 {
 pub unsafe extern "C-unwind" fn __bs_object_entries(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
     let array = crate::array::__bs_array_new();
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         if payload != 0 {
             let obj_ptr = payload as *mut u8;
@@ -240,10 +240,10 @@ pub unsafe extern "C-unwind" fn __bs_object_entries(obj: u64) -> u64 {
 pub unsafe extern "C-unwind" fn __bs_object_assign(target: u64, source: u64) -> u64 {
     let target_tag = target & 0xFFFF_0000_0000_0000;
     let source_tag = source & 0xFFFF_0000_0000_0000;
-    if target_tag == 0xFFF6_0000_0000_0000 {
+    if target_tag == 0xFFF6_0000_0000_0000 || target_tag == 0x7FF6_0000_0000_0000 || target_tag == 0xFFFE_0000_0000_0000 || target_tag == 0x7FFE_0000_0000_0000 {
         let target_payload = target & 0x0000_FFFF_FFFF_FFFF;
         let _target_ptr = target_payload as *mut u8;
-        if source_tag == 0xFFF6_0000_0000_0000 {
+        if source_tag == 0xFFF6_0000_0000_0000 || source_tag == 0x7FF6_0000_0000_0000 || source_tag == 0xFFFE_0000_0000_0000 || source_tag == 0x7FFE_0000_0000_0000 {
             let source_payload = source & 0x0000_FFFF_FFFF_FFFF;
             let source_ptr = source_payload as *mut u8;
             let vtable_ptr = *(source_ptr as *const *const VTable);
@@ -292,7 +292,7 @@ pub unsafe extern "C-unwind" fn __bs_object_create(proto: u64) -> u64 {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_object_getPrototypeOf(obj: u64) -> u64 {
     let tag = obj & 0xFFFF_0000_0000_0000;
-    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
         let payload = obj & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         if let Some(proto) = get_dynamic_property(obj_ptr, "__proto__") {

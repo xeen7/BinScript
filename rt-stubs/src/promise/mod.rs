@@ -77,12 +77,12 @@ pub unsafe fn add_internal_then(promise_tagged: u64, cb: PromiseCallback) {
 #[no_mangle]
 pub unsafe extern "C-unwind" fn __bs_promise_then(promise_tagged: u64, callback_closure: u64) -> u64 {
     let closure_ptr = (callback_closure & 0x0000_FFFF_FFFF_FFFF) as *const u64;
-    let cb_fn: extern "C-unwind" fn(u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: extern "C-unwind" fn(u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     
     let new_promise = __bs_promise_new();
     
     add_internal_then(promise_tagged, Box::new(move |val| {
-        let res = cb_fn(callback_closure, val);
+        let res = cb_fn(callback_closure, 0xFFF1_0000_0000_0000, val);
         __bs_promise_resolve(new_promise, res);
     }));
     

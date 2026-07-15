@@ -59,7 +59,7 @@ pub unsafe extern "C-unwind" fn __bs_object_spread(target_tagged: u64, source_ta
                 }
             }
         }
-    } else if source_tag == 0xFFF8_0000_0000_0000 { // TAG_JSON_TAPE
+    } else if source_tag == 0xFFF8_0000_0000_0000 || source_tag == 0x7FF8_0000_0000_0000 { // TAG_JSON_TAPE
         let src_payload = source_tagged & 0x0000_FFFF_FFFF_FFFF;
         if src_payload != 0 {
             let ptr = src_payload as *mut std::sync::Mutex<crate::json::tape::JsonTape>;

@@ -31,7 +31,7 @@ pub unsafe extern "C-unwind" fn __bs_String(val: u64) -> u64 {
             let desc = c_str.to_str().unwrap_or("");
             create_tagged_string(&format!("Symbol({})", desc))
         }
-    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
         let payload = val & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         let vtable_ptr = *(obj_ptr as *const *const VTable);
@@ -85,7 +85,7 @@ pub unsafe extern "C-unwind" fn __bs_Number(val: u64) -> u64 {
     } else if tag == 0xFFF7_0000_0000_0000 {
         let s = get_c_string_from_tagged(val);
         s.trim().parse::<f64>().unwrap_or(f64::NAN)
-    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 {
+    } else if tag == 0xFFF6_0000_0000_0000 || tag == 0x7FF6_0000_0000_0000 || tag == 0xFFFE_0000_0000_0000 || tag == 0x7FFE_0000_0000_0000 {
         let payload = val & 0x0000_FFFF_FFFF_FFFF;
         let obj_ptr = payload as *mut u8;
         let vtable_ptr = *(obj_ptr as *const *const VTable);

@@ -23,7 +23,7 @@ impl<'ctx> LlvmCodegen<'ctx> {
         .map(|a| self.val(a).map(|v| v.into()))
         .collect::<CompileResult<_>>()?;
     let expected_params = fn_val.count_params() as usize;
-    if expected_params == av.len() + 1 {
+    while expected_params > av.len() {
         av.insert(0, self.nan.const_undefined().into());
     }
     let rv = self.emit_call_with_invoke(fn_val, &av, "call").unwrap();

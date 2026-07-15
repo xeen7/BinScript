@@ -13,7 +13,7 @@ pub static MAP_DATA: Lazy<Mutex<HashMap<u64, HashMap<u64, u64>>>> = Lazy::new(||
 
 // --- Map Methods ---
 
-pub unsafe extern "C-unwind" fn map_set(this: u64, key: u64, val: u64) -> u64 {
+pub unsafe extern "C-unwind" fn map_set(_env: u64, this: u64, key: u64, val: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { libc::abort(); }
     let fmt = b"map_set: map=%lx key=%lx val=%lx\n\0".as_ptr() as *const libc::c_char;
@@ -40,7 +40,7 @@ pub unsafe extern "C-unwind" fn map_set(this: u64, key: u64, val: u64) -> u64 {
     obj_tagged
 }
 
-pub unsafe extern "C-unwind" fn map_get(this: u64, key: u64) -> u64 {
+pub unsafe extern "C-unwind" fn map_get(_env: u64, this: u64, key: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return 0xFFF1_0000_0000_0000; }
     let fmt = b"map_get: map=%lx key=%lx\n\0".as_ptr() as *const libc::c_char;
@@ -63,7 +63,7 @@ pub unsafe extern "C-unwind" fn map_get(this: u64, key: u64) -> u64 {
     result
 }
 
-pub unsafe extern "C-unwind" fn map_has(this: u64, key: u64) -> u64 {
+pub unsafe extern "C-unwind" fn map_has(_env: u64, this: u64, key: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return crate::circ::box_boolean(false); }
     let data = MAP_DATA.lock().unwrap();
@@ -73,7 +73,7 @@ pub unsafe extern "C-unwind" fn map_has(this: u64, key: u64) -> u64 {
     crate::circ::box_boolean(has)
 }
 
-pub unsafe extern "C-unwind" fn map_delete(this: u64, key: u64) -> u64 {
+pub unsafe extern "C-unwind" fn map_delete(_env: u64, this: u64, key: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return crate::circ::box_boolean(false); }
     let mut data = MAP_DATA.lock().unwrap();
@@ -94,7 +94,7 @@ pub unsafe extern "C-unwind" fn map_delete(this: u64, key: u64) -> u64 {
     crate::circ::box_boolean(deleted)
 }
 
-pub unsafe extern "C-unwind" fn map_clear(this: u64) -> u64 {
+pub unsafe extern "C-unwind" fn map_clear(_env: u64, this: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return 0xFFF1_0000_0000_0000; }
     let mut data = MAP_DATA.lock().unwrap();
@@ -148,7 +148,7 @@ pub unsafe extern "C-unwind" fn __bs_Map_new_1(iterable: u64) -> u64 {
             let pair = crate::array::__bs_array_get(iterable, crate::circ::box_number(i as f64));
             let k = crate::array::__bs_array_get(pair, crate::circ::box_number(0.0));
             let v = crate::array::__bs_array_get(pair, crate::circ::box_number(1.0));
-            let ret = map_set(obj, k, v);
+            let ret = map_set(0, obj, k, v);
             crate::circ::circ_dec_tagged(ret);
             crate::circ::circ_dec_tagged(k);
             crate::circ::circ_dec_tagged(v);

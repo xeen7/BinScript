@@ -37,7 +37,7 @@ pub unsafe extern "C" fn __bs_json_parse_lazy(ptr: *const u8, len: u32) -> u64 {
 #[no_mangle]
 pub unsafe extern "C" fn __bs_json_tape_get(tape_tagged: u64, key_ptr: *const u8, key_len: u32) -> u64 {
     let tag = tape_tagged & 0xFFFF_0000_0000_0000;
-    if tag != TAG_JSON_TAPE {
+    if tag != TAG_JSON_TAPE && tag != 0x7FF8_0000_0000_0000 {
         return 0xFFF1_0000_0000_0000; // undefined
     }
 
@@ -96,7 +96,7 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
     c_prop[..len as usize].copy_from_slice(std::slice::from_raw_parts(prop_str, len as usize));
     libc::printf(b"__bs_prop_get: obj=%p tag=%llx prop=%s\n\0".as_ptr() as *const i8, obj_tagged, tag, c_prop.as_ptr() as *const i8);
     
-    if tag == TAG_JSON_TAPE {
+    if tag == TAG_JSON_TAPE || tag == 0x7FF8_0000_0000_0000 {
         return __bs_json_tape_get(obj_tagged, prop_str, len);
     }
     if tag == 0xFFFB_0000_0000_0000 || tag == 0x7FFB_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 {
@@ -127,7 +127,7 @@ pub unsafe extern "C" fn __bs_prop_get(obj_tagged: u64, prop_str: *const u8, len
         libc::printf(b"__bs_prop_get returning undefined (string prop)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
-    if tag != 0xFFF6_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FFE_0000_0000_0000 {
         libc::printf(b"__bs_prop_get returning undefined (invalid tag)\n\0".as_ptr() as *const i8);
         return 0xFFF1_0000_0000_0000; // undefined
     }
@@ -252,7 +252,7 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
     c_prop[..len as usize].copy_from_slice(std::slice::from_raw_parts(prop_str, len as usize));
     libc::printf(b"__bs_prop_set: obj=%p tag=%llx prop=%s val=%llx\n\0".as_ptr() as *const i8, obj_tagged, tag, c_prop.as_ptr() as *const i8, val_tagged);
     
-    if tag == TAG_JSON_TAPE {
+    if tag == TAG_JSON_TAPE || tag == 0x7FF8_0000_0000_0000 {
         return;
     }
     if tag == 0xFFFB_0000_0000_0000 || tag == 0x7FFB_0000_0000_0000 || tag == 0x7FFA_0000_0000_0000 {
@@ -265,7 +265,7 @@ pub unsafe extern "C" fn __bs_prop_set(obj_tagged: u64, prop_str: *const u8, len
         }
         return;
     }
-    if tag != 0xFFF6_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FFE_0000_0000_0000 {
         return;
     }
     
@@ -323,7 +323,7 @@ pub unsafe extern "C-unwind" fn __bs_prop_set_moved(obj_tagged: u64, prop_ptr: *
     c_prop[..prop_len as usize].copy_from_slice(std::slice::from_raw_parts(prop_ptr, prop_len as usize));
     libc::printf(b"__bs_prop_set_moved: obj=%p tag=%llx prop=%s val=%llx\n\0".as_ptr() as *const i8, obj_tagged, tag, c_prop.as_ptr() as *const i8, val_tagged);
     
-    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 {
+    if tag != 0xFFF6_0000_0000_0000 && tag != 0xFFF9_0000_0000_0000 && tag != 0xFFFA_0000_0000_0000 && tag != 0x7FF6_0000_0000_0000 && tag != 0xFFFE_0000_0000_0000 && tag != 0x7FFE_0000_0000_0000 {
         let prop_slice = std::slice::from_raw_parts(prop_ptr, prop_len as usize);
         if let Ok(s) = std::str::from_utf8(prop_slice) {
             if let Ok(idx) = s.parse::<f64>() {

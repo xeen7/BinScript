@@ -132,6 +132,8 @@ pub fn lower_module(hir: &HirModule) -> CompileResult<MirModule> {
         let env_reg = if is_closure {
             let reg = ctx.fresh_reg();
             params.push((reg, "__env".to_string()));
+            let this_reg = ctx.fresh_reg();
+            params.push((this_reg, "__this".to_string()));
             Some(reg)
         } else {
             None

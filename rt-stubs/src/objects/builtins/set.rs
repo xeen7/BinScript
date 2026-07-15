@@ -14,7 +14,7 @@ pub static SET_DATA: Lazy<Mutex<HashMap<u64, HashMap<u64, ()>>>> = Lazy::new(|| 
 
 // --- Set Methods ---
 
-pub unsafe extern "C-unwind" fn set_add(this: u64, key: u64) -> u64 {
+pub unsafe extern "C-unwind" fn set_add(_env: u64, this: u64, key: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { libc::abort(); }
     let mut data = SET_DATA.lock().unwrap();
@@ -35,7 +35,7 @@ pub unsafe extern "C-unwind" fn set_add(this: u64, key: u64) -> u64 {
     obj_tagged
 }
 
-pub unsafe extern "C-unwind" fn set_has(this: u64, key: u64) -> u64 {
+pub unsafe extern "C-unwind" fn set_has(_env: u64, this: u64, key: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return crate::circ::box_boolean(false); }
     let data = SET_DATA.lock().unwrap();
@@ -45,7 +45,7 @@ pub unsafe extern "C-unwind" fn set_has(this: u64, key: u64) -> u64 {
     crate::circ::box_boolean(has)
 }
 
-pub unsafe extern "C-unwind" fn set_delete(this: u64, key: u64) -> u64 {
+pub unsafe extern "C-unwind" fn set_delete(_env: u64, this: u64, key: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return crate::circ::box_boolean(false); }
     let mut data = SET_DATA.lock().unwrap();
@@ -64,7 +64,7 @@ pub unsafe extern "C-unwind" fn set_delete(this: u64, key: u64) -> u64 {
     crate::circ::box_boolean(deleted)
 }
 
-pub unsafe extern "C-unwind" fn set_clear(this: u64) -> u64 {
+pub unsafe extern "C-unwind" fn set_clear(_env: u64, this: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return 0xFFF1_0000_0000_0000; }
     let mut data = SET_DATA.lock().unwrap();
@@ -112,7 +112,7 @@ pub unsafe extern "C-unwind" fn __bs_Set_new_1(iterable: u64) -> u64 {
         let len = f64::from_bits(len_f) as usize;
         for i in 0..len {
             let item = crate::array::__bs_array_get(iterable, crate::circ::box_number(i as f64));
-            let ret = set_add(obj, item);
+            let ret = set_add(0, obj, item);
             crate::circ::circ_dec_tagged(ret);
             crate::circ::circ_dec_tagged(item);
         }

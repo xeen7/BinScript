@@ -376,11 +376,11 @@ pub unsafe extern "C-unwind" fn __bs_array_forEach(arr_tagged: u64, cb_tagged: u
     let arr = untag_array(arr_tagged);
     if arr.is_null() { return; }
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..(*arr).length as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        cb_fn(cb_tagged, val, idx, arr_tagged);
+        cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, val, idx, arr_tagged);
     }
 }
 
@@ -394,11 +394,11 @@ pub unsafe extern "C-unwind" fn __bs_array_map(arr_tagged: u64, cb_tagged: u64) 
     let len = (*arr).length;
     grow_array(new_arr, len);
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..len as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        let result = cb_fn(cb_tagged, val, idx, arr_tagged);
+        let result = cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, val, idx, arr_tagged);
         *(*new_arr).data.add(i) = result;
     }
     (*new_arr).length = len;
@@ -412,11 +412,11 @@ pub unsafe extern "C-unwind" fn __bs_array_filter(arr_tagged: u64, cb_tagged: u6
     if arr.is_null() { return __bs_array_new(); }
     let new_tagged = __bs_array_new();
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..(*arr).length as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        let result = cb_fn(cb_tagged, val, idx, arr_tagged);
+        let result = cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, val, idx, arr_tagged);
         if is_truthy(result) {
             __bs_array_push(new_tagged, val);
         }
@@ -430,11 +430,11 @@ pub unsafe extern "C-unwind" fn __bs_array_find(arr_tagged: u64, cb_tagged: u64)
     let arr = untag_array(arr_tagged);
     if arr.is_null() { return 0; }
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..(*arr).length as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        let result = cb_fn(cb_tagged, val, idx, arr_tagged);
+        let result = cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, val, idx, arr_tagged);
         if is_truthy(result) {
             return val;
         }
@@ -448,11 +448,11 @@ pub unsafe extern "C-unwind" fn __bs_array_findIndex(arr_tagged: u64, cb_tagged:
     let arr = untag_array(arr_tagged);
     if arr.is_null() { return crate::circ::box_number(-1.0); }
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..(*arr).length as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        let result = cb_fn(cb_tagged, val, idx, arr_tagged);
+        let result = cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, val, idx, arr_tagged);
         if is_truthy(result) {
             return crate::circ::box_number(i as f64);
         }
@@ -466,11 +466,11 @@ pub unsafe extern "C-unwind" fn __bs_array_every(arr_tagged: u64, cb_tagged: u64
     let arr = untag_array(arr_tagged);
     if arr.is_null() { return 0xFFF4_0000_0000_0000; } // true for empty
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..(*arr).length as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        let result = cb_fn(cb_tagged, val, idx, arr_tagged);
+        let result = cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, val, idx, arr_tagged);
         if !is_truthy(result) {
             return 0xFFF3_0000_0000_0000; // false
         }
@@ -484,11 +484,11 @@ pub unsafe extern "C-unwind" fn __bs_array_some(arr_tagged: u64, cb_tagged: u64)
     let arr = untag_array(arr_tagged);
     if arr.is_null() { return 0xFFF3_0000_0000_0000; } // false for empty
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..(*arr).length as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        let result = cb_fn(cb_tagged, val, idx, arr_tagged);
+        let result = cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, val, idx, arr_tagged);
         if is_truthy(result) {
             return 0xFFF4_0000_0000_0000; // true
         }
@@ -504,11 +504,11 @@ pub unsafe extern "C-unwind" fn __bs_array_reduce(arr_tagged: u64, cb_tagged: u6
     if arr.is_null() { return init; }
     let mut acc = init;
     let closure_ptr = (cb_tagged & PAYLOAD_MASK) as *const u64;
-    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
+    let cb_fn: unsafe extern "C-unwind" fn(u64, u64, u64, u64, u64, u64) -> u64 = std::mem::transmute(*closure_ptr);
     for i in 0..(*arr).length as usize {
         let val = *(*arr).data.add(i);
         let idx = crate::circ::box_number(i as f64);
-        acc = cb_fn(cb_tagged, acc, val, idx, arr_tagged);
+        acc = cb_fn(cb_tagged, 0xFFF1_0000_0000_0000, acc, val, idx, arr_tagged);
     }
     acc
 }

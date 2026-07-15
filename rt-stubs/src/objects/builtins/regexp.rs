@@ -17,7 +17,7 @@ fn build_regex(pattern_tagged: u64, flags_tagged: u64) -> Option<regex::Regex> {
     regex::Regex::new(&rust_pattern).ok()
 }
 
-pub unsafe extern "C-unwind" fn regexp_test(this: u64, text_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn regexp_test(_env: u64, this: u64, text_tagged: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { libc::abort(); }
     let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;
@@ -35,7 +35,7 @@ pub unsafe extern "C-unwind" fn regexp_test(this: u64, text_tagged: u64) -> u64 
     crate::circ::box_boolean(matched)
 }
 
-pub unsafe extern "C-unwind" fn regexp_exec(this: u64, text_tagged: u64) -> u64 {
+pub unsafe extern "C-unwind" fn regexp_exec(_env: u64, this: u64, text_tagged: u64) -> u64 {
     let obj_tagged = this;
     if (obj_tagged & 0xFFFF_0000_0000_0000) != 0xFFF6_0000_0000_0000 && (obj_tagged & 0xFFFF_0000_0000_0000) != 0x7FF6_0000_0000_0000 { return 0xFFF2_0000_0000_0000; /* return null if invalid */ }
     let payload = obj_tagged & 0x0000_FFFF_FFFF_FFFF;

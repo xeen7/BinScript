@@ -20,7 +20,7 @@ impl<'a> LowerCtx<'a> {
                     if !captures.is_empty() {
                         if let Some(&bid) = self.global_fn_bindings.get(name) {
                             if let Some(&callee_reg) = self.bindings.get(&bid) {
-                                let mut call_args = vec![MirOperand::Reg(callee_reg)];
+                                let mut call_args = vec![MirOperand::Reg(callee_reg), MirOperand::ConstUndefined];
                                 call_args.extend(mir_args);
                                 self.emit(MirInstr::CallClosure(dest, callee_reg, call_args));
                                 return Ok(MirOperand::Reg(dest));
@@ -88,7 +88,7 @@ impl<'a> LowerCtx<'a> {
                         r
                     }
                 };
-                let mut call_args = vec![MirOperand::Reg(callee_reg)];
+                let mut call_args = vec![MirOperand::Reg(callee_reg), MirOperand::ConstUndefined];
                 call_args.extend(mir_args);
                 self.emit(MirInstr::CallClosure(dest, callee_reg, call_args));
             }
